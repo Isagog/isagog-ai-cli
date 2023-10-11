@@ -34,7 +34,8 @@ def similarity_ranking(target: str,
     if res.ok:
         return [(rank[0], rank[1]) for rank in res.json()]
     else:
-        raise Exception(f"Similarity ranking failed {res}")
+        log.error("similarity ranking failed: code=%d, reason=%s", res.status_code, res.reason)
+        return []
 
 
 def extract_keywords_from(text: str, number=5) -> list[str]:
@@ -53,7 +54,8 @@ def extract_keywords_from(text: str, number=5) -> list[str]:
         words = [kwr[0] for kwr in res_dict["keyword"]]
         return words
     else:
-        raise Exception(f"Query failed {res.status_code} {res.reason}")
+        log.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
+        return []
 
 
 def extract_words(text: str, filter_pos=search_pos) -> list[str]:
@@ -71,7 +73,8 @@ def extract_words(text: str, filter_pos=search_pos) -> list[str]:
         words = [Word(**{k: v for k, v in r.items() if k in Word._fields}) for r in res_dict["words"]]
         return [w.text for w in words if w.pos in filter_pos]
     else:
-        raise Exception(f"Query failed {res.status_code} {res.reason}")
+        log.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
+        return []
 
 
 def extract_words_entities(text: str, filter_pos=lexical_pos) -> (list[Word], list[NamedEntity]):
@@ -94,4 +97,5 @@ def extract_words_entities(text: str, filter_pos=lexical_pos) -> (list[Word], li
         return words, entities
 
     else:
-        raise Exception(f"Query failed {res.status_code} {res.reason}")
+        log.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
+        return [], []
