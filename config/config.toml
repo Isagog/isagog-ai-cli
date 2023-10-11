@@ -1,0 +1,15 @@
+[api]
+host = "localhost"
+port = 4100
+log = "ERROR"
+
+
+[isagog]
+ISAGOG_AI_KG_ROUTE =   "https://ai.isagog.com/api/kg/graph" # "http://localhost:11997/api/kg/graph" #
+ISAGOG_AI_NLP_ROUTE = "https://ai.isagog.com/api/nlp" #"http://localhost:20899/api/nlp"
+
+[nlp]
+default_search = "keyword_search"
+search_pos = ["NOUN", "VERB", "PROPN", "ADJ"]
+lexical_pos = ["NOUN", "VERB", "ADJ", "ADV"]
+
