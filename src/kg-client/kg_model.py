@@ -48,10 +48,10 @@ class Entity(object):
     """
     ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty]
 
-    def __init__(self, _id: str, _type: str):
-        assert (_id and _type)
+    def __init__(self, data: dict, _type: str = None):
+        assert (data and _type)
         assert _type in Entity.ALLOWED_TYPES
-        self.id = _id
+        self.id = data.get('id', KeyError("invalid entity data"))
         self.type = _type
 
     def to_dict(self) -> dict:
@@ -113,7 +113,7 @@ class Concept(Entity):
     """
 
     def __init__(self, data: dict):
-        super().__init__(data.get('id'), OWL.Class)
+        super().__init__(data, OWL.Class)
         self.comment = data.get('comment', "")
         self.ontology = data.get('ontology', "")
         self.parents = data.get('parents', [])
@@ -126,7 +126,7 @@ class Reference(Entity):
     """
 
     def __init__(self, data: dict):
-        super().__init__(data.get('id'), OWL.Axiom)
+        super().__init__(data, OWL.Axiom)
         self.kinds = data.get('kinds', [])
 
 
@@ -136,7 +136,7 @@ class Relationship(Assertion):
     isagog_api/openapi/isagog_kg.openapi.yaml
     """
 
-    def __init__(self, data: dict, predicate: str):
+    def __init__(self, data: dict):
         super().__init__(predicate=data.get('id', KeyError("missing relation id")),
                          values=[Reference(r_data) for r_data in data['values']] if 'values' in data else [])
 
@@ -164,7 +164,7 @@ class Individual(Entity):
     """
 
     def __init__(self, data: dict):
-        super().__init__(data.get('id'), OWL.NamedIndividual)
+        super().__init__(data, OWL.NamedIndividual)
         self.label = data.get('label', _uri_label(self.id))
         self.kinds = data.get('kinds', [OWL.Thing])
         self.comment = data.get('comment', '')

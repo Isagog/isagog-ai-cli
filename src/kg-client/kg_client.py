@@ -25,14 +25,14 @@ class KnowledgeBase(object):
     A KG proxy
     """
 
-    def __init__(self, route: str, dataset: str):
+    def __init__(self, route: str, dataset: str = None):
         """
 
         :param route: the service's endpoint route
         :param dataset: the dataset name
         """
-        assert (route and dataset)
-        self.endpoint = f"{route}/api/kg/graph"
+        assert route
+        self.route = route
         self.dataset = dataset
 
     def fetch_entity(self,
@@ -49,16 +49,18 @@ class KnowledgeBase(object):
 
         assert id
 
-        if not issubclass(entity_type, Individual):
+        if not issubclass(entity_type, Entity):
             raise ValueError(f"{entity_type} not an Entity")
 
-        params = f"id={id}&dataset={self.dataset}&expand=true"
+        params = f"id={id}&expand=true"
+        if self.dataset:
+            params += f"&dataset={self.dataset}"
 
         if limit:
             params += f"&limit={str(limit)}"
 
         res = requests.get(
-            url=self.endpoint,
+            url=self.route,
             params=params,
             headers={"Accept": "application/json"},
         )
@@ -93,7 +95,7 @@ class KnowledgeBase(object):
             req["dataset"] = dataset
 
         res = requests.post(
-            url=self.endpoint,
+            url=self.route,
             json=req,
             headers={"Accept": "application/json"},
             timeout=30
@@ -145,7 +147,7 @@ class KnowledgeBase(object):
                 req["dataset"] = dataset
 
             res = requests.post(
-                url=self.endpoint,
+                url=self.route,
                 json=req,
                 headers={"Accept": "application/json"},
                 timeout=30
