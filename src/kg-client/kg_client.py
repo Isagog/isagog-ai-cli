@@ -88,8 +88,12 @@ class KnowledgeBase(object):
 
         req = {
             "subject": subject_id,
-            "clauses": [{"property": prop, "project": True} for prop in properties]
-        }
+            "clauses": [{
+                         "property": str(prop),
+                         "optional": True,
+                         "project": True
+                        } for prop in properties]
+            }
 
         if dataset:
             req["dataset"] = dataset
@@ -109,17 +113,17 @@ class KnowledgeBase(object):
             else:
                 res_attrib_list = res_list[0].get('attributes', OSError("malformed response"))
 
-                def __get_attrib(prop: str) -> str:
+                def __get_values(prop: str) -> str:
                     try:
-                        record = next(item for item in res_attrib_list if item['subject_id'] == prop)
+                        record = next(item for item in res_attrib_list if item['id'] == prop)
                         return record.get('values', OSError("malformed response"))
                     except StopIteration:
                         raise OSError("incomplete response: %s not found", prop)
 
-                return [Assertion(__get_attrib(f"<{prop}>")) for prop in properties] # todo this is gonna fail
+                return [Assertion(predicate=prop, values=__get_values(f"<{prop}>")) for prop in properties]
         else:
-            log.error("query of entity %s failed due to %s", subject_id, res.reason)
-            return None
+            log.warning("query of entity %s failed due to %s", subject_id, res.reason)
+            return []
 
     def search_named_individuals(self,
                                  references: dict[str, str],
