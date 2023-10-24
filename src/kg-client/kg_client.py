@@ -13,6 +13,7 @@ from typing import Type, TypeVar
 
 from rdflib import RDFS
 
+from kb_query import UnarySelectQuery
 from kg_model import Individual, Entity, Assertion
 
 log = logging.getLogger("isagog-cli")
@@ -25,11 +26,14 @@ class KnowledgeBase(object):
     A KG proxy
     """
 
-    def __init__(self, route: str, dataset: str = None):
+    def __init__(self,
+                 route: str,
+                 ontology: Ontology = None,
+                 dataset: str = None):
         """
 
         :param route: the service's endpoint route
-        :param dataset: the dataset name
+        :param dataset: the dataset name; if None, uses the service's default
         """
         assert route
         self.route = route
@@ -37,8 +41,8 @@ class KnowledgeBase(object):
 
     def fetch_entity(self,
                      id: str,
-                     entity_type: Type[E] = Entity,
-                     limit=None) -> E | None:
+                     entity_type: Type[E] = Entity
+                     ) -> E | None:
         """
         Gets all individual entity data from the kg
 
@@ -56,9 +60,6 @@ class KnowledgeBase(object):
         if self.dataset:
             params += f"&dataset={self.dataset}"
 
-        if limit:
-            params += f"&limit={str(limit)}"
-
         res = requests.get(
             url=self.route,
             params=params,
@@ -73,8 +74,7 @@ class KnowledgeBase(object):
 
     def query_assertions(self,
                          subject_id: str,
-                         properties: list[str],
-                         dataset: str = None,
+                         properties: list[str]
                          ) -> list[Assertion]:  # todo: why is this a list and not a dict?
         """
         Returns entity properties
@@ -89,14 +89,14 @@ class KnowledgeBase(object):
         req = {
             "subject": subject_id,
             "clauses": [{
-                         "property": str(prop),
-                         "optional": True,
-                         "project": True
-                        } for prop in properties]
-            }
+                "property": str(prop),
+                "optional": True,
+                "project": True
+            } for prop in properties]
+        }
 
-        if dataset:
-            req["dataset"] = dataset
+        if self.dataset:
+            req["dataset"] = self.dataset
 
         res = requests.post(
             url=self.route,
@@ -108,7 +108,7 @@ class KnowledgeBase(object):
         if res.ok:
             res_list = res.json()
             if len(res_list) == 0:
-                log.warning("void attribute query")
+                log.warning("Void attribute query")
                 return []
             else:
                 res_attrib_list = res_list[0].get('attributes', OSError("malformed response"))
@@ -122,20 +122,53 @@ class KnowledgeBase(object):
 
                 return [Assertion(predicate=prop, values=__get_values(f"<{prop}>")) for prop in properties]
         else:
-            log.warning("query of entity %s failed due to %s", subject_id, res.reason)
+            log.warning("Query of entity %s failed due to %s", subject_id, res.reason)
             return []
 
-    def search_named_individuals(self,
-                                 references: dict[str, str],
-                                 dataset: str = None) -> list[Individual]:
+    # def search_named_individuals(self,
+    #                              references: dict[str, str]) -> list[Individual]:
+    #    entities = []
+    #    for name, kind in references.items():
+    #        req = {
+    #            "kinds": [kind],
+    #            "clauses": [
+    #                {
+    #                    "property": "http://www.w3.org/2000/01/rdf-schema#label",
+    #                    "value": name,
+    #                    "method": "regex"
+    #                }
+    #            ]
+    #        }
+    #
+    #        if self.dataset:
+    #            req["dataset"] = self.dataset
+    #
+    #        res = requests.post(
+    #            url=self.route,
+    #            json=req,
+    #            headers={"Accept": "application/json"},
+    #            timeout=30
+    #        )
+    #
+    #        if res.ok:
+    #            entities.extend([Individual(r) for r in res.json()])
+    #        else:
+    #            log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
+    #
+    #    return entities
+
+    def search_individuals(self,
+                           attribute_value: dict[str, str],
+                           kinds: list[str] = None) -> list[Individual]:
         """
-        Retrieves named entities
-        :param dataset:
+        Retrieves individuals by string search
         :param references: a dictionary of "name" (key) : "type", where type is one of PER, LOC, ORG
         :return:
         """
         entities = []
-        for name, kind in references.items():
+        query = UnarySelectQuery()
+
+        for attribute, value in attribute_value.items():
             req = {
                 "kinds": [kind],
                 "clauses": [
@@ -147,8 +180,8 @@ class KnowledgeBase(object):
                 ]
             }
 
-            if dataset:
-                req["dataset"] = dataset
+            if self.dataset:
+                req["dataset"] = self.dataset
 
             res = requests.post(
                 url=self.route,
@@ -159,5 +192,7 @@ class KnowledgeBase(object):
 
             if res.ok:
                 entities.extend([Individual(r) for r in res.json()])
+            else:
+                log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
 
         return entities
