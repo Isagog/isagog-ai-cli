@@ -235,6 +235,7 @@ class SelectQuery(object):
     """
 
     def __init__(self,
+                 dataset: str,
                  prefixes: list[(str, str)],
                  clauses: list[Clause],
                  graph: str,
@@ -246,6 +247,7 @@ class SelectQuery(object):
         Buils a selecion query
         @param clauses: a list of selection clauses
         """
+        self.dataset = dataset
         if prefixes is None:
             prefixes = DEFAULT_PREFIXES
         self.prefixes = prefixes
@@ -290,6 +292,7 @@ class UnarySelectQuery(SelectQuery):
     """
 
     def __init__(self,
+                 dataset=None,
                  prefixes=None,
                  clauses: list[AtomClause] = None,
                  graph="defaultGraph",
@@ -302,6 +305,7 @@ class UnarySelectQuery(SelectQuery):
         @param clauses: a list of selection clauses
         """
         super().__init__(
+            dataset=dataset,
             prefixes=prefixes,
             clauses=clauses,
             graph=graph,
@@ -408,6 +412,8 @@ class UnarySelectQuery(SelectQuery):
         kinds = self.get_kinds()
         if len(kinds) > 0:
             out["kinds"] = kinds
+        if self.dataset:
+            out["dataset"] = self.dataset
         out["clauses"] = [c.to_dict() for c in self.get_atom_clauses()]
         out['graph'] = self.graph
         out['limit'] = self.limit

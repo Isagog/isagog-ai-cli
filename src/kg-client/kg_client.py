@@ -13,8 +13,8 @@ from typing import Type, TypeVar
 
 from rdflib import RDFS
 
-from kb_query import UnarySelectQuery
-from kg_model import Individual, Entity, Assertion
+from kb_query import UnarySelectQuery, Clause, AtomClause, UnionClause
+from kg_model import Individual, Entity, Assertion, Ontology, Attribute
 
 log = logging.getLogger("isagog-cli")
 
@@ -158,41 +158,45 @@ class KnowledgeBase(object):
     #    return entities
 
     def search_individuals(self,
-                           attribute_value: dict[str, str],
-                           kinds: list[str] = None) -> list[Individual]:
+                           kinds: list[str] = None,
+                           search_values: dict[Attribute, str] = None,
+                           ) -> list[Individual]:
         """
         Retrieves individuals by string search
-        :param references: a dictionary of "name" (key) : "type", where type is one of PER, LOC, ORG
+        :param kinds:
+        :param search_values:
         :return:
         """
+        assert (kinds or search_values)
         entities = []
         query = UnarySelectQuery()
+        if kinds:
+            query.add_kinds(kinds)
+        if search_values:
+            search_clauses = UnionClause()
+            for attribute, value in search_values.items():
+                search_clauses.add_constraint(predicate=attribute, argument=value, method="regex")
+                # req = {
+                #     "kinds": [kind],
+                #     "clauses": [
+                #         {
+                #             "property": "http://www.w3.org/2000/01/rdf-schema#label",
+                #             "value": name,
+                #             "method": "regex"
+                #         }
+                #     ]
+                # }
 
-        for attribute, value in attribute_value.items():
-            req = {
-                "kinds": [kind],
-                "clauses": [
-                    {
-                        "property": "http://www.w3.org/2000/01/rdf-schema#label",
-                        "value": name,
-                        "method": "regex"
-                    }
-                ]
-            }
+        res = requests.post(
+            url=self.route,
+            json=query.to_dict(),
+            headers={"Accept": "application/json"},
+            timeout=30
+        )
 
-            if self.dataset:
-                req["dataset"] = self.dataset
-
-            res = requests.post(
-                url=self.route,
-                json=req,
-                headers={"Accept": "application/json"},
-                timeout=30
-            )
-
-            if res.ok:
-                entities.extend([Individual(r) for r in res.json()])
-            else:
-                log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
+        if res.ok:
+            entities.extend([Individual(r.get('id'), **r) for r in res.json()])
+        else:
+            log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
 
         return entities

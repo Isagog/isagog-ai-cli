@@ -5,9 +5,10 @@ log = "ERROR"
 
 
 [isagog]
-# ISAGOG_AI_KG_ROUTE = "https://ai.isagog.com/api/kg/graph"
-ISAGOG_AI_KG_ROUTE = "http://localhost:11997/api/kg/graph"
-ISAGOG_AI_NLP_ROUTE = "https://ai.isagog.com/api/nlp" #"http://localhost:20899/api/nlp"
+ISAGOG_AI_KG_ROUTE = "https://ai.isagog.com/api/kg/graph"
+#ISAGOG_AI_KG_ROUTE = "http://localhost:11997/api/kg/graph"
+#ISAGOG_AI_NLP_ROUTE = "http://localhost:20899/api/nlp"
+ISAGOG_AI_NLP_ROUTE = "https://ai.isagog.com/api/nlp"
 
 [nlp]
 default_search = "keyword_search"
