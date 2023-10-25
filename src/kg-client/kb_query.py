@@ -1,6 +1,8 @@
+import random
 import re
 from enum import Enum
 from io import StringIO
+
 
 from rdflib import RDF, RDFS, OWL, URIRef
 
@@ -108,7 +110,7 @@ class AtomClause(Clause):
                  subject: Identifier | Variable = None,
                  predicate: Identifier = None,  # no predicate variable allowed
                  argument: Value | Variable | Identifier = None,
-                 variable: Variable = None,
+            #     variable: Variable = None,
                  method: Comparison = Comparison.ANY,
                  project=False,
                  optional=False):
@@ -120,8 +122,8 @@ class AtomClause(Clause):
 
         self.predicate = predicate if predicate and isinstance(predicate, Identifier) \
             else Identifier(predicate) if predicate else None
-        self.argument = argument if argument else variable  # binary predicate's second argument
-        self.variable = variable if variable else argument  # argument's variable
+        self.argument = argument if argument else Variable(random.randint(1, 10000)) # variable  # binary predicate's second argument
+    #    self.variable = variable if variable else argument  # argument's variable
         self.method = method
         self.project = project
         self.optional = optional
@@ -273,7 +275,14 @@ class SelectQuery(object):
         """
         Selects all the projectes arguments
         """
-        return set([c.variable for c in self.project_clauses()])
+        _vars = []
+        for c in self.clauses:
+            if isinstance(c.subject, Variable):
+                _vars.append(c.subject)
+            if isinstance(c, AtomClause) and c.project:
+                _vars.append(c.argument)
+        return set(_vars)
+    #    return set([c.argument for c in self.project_clauses() if isinstance(c.argument, Variable)])
 
     def has_return_vars(self) -> bool:
         return len(self.project_vars()) > 0
@@ -292,6 +301,7 @@ class UnarySelectQuery(SelectQuery):
     """
 
     def __init__(self,
+                 subject=None,
                  dataset=None,
                  prefixes=None,
                  clauses: list[AtomClause] = None,
@@ -314,7 +324,10 @@ class UnarySelectQuery(SelectQuery):
             min_score=min_score,
         )
 
-        self.subject = Variable("i")
+        if subject:
+            self.subject = subject if isinstance(subject, Identifier) else Identifier(subject)
+        else:
+            self.subject = Variable("i")
 
     def add(self, clause: Clause):
         if clause.subject is None:
@@ -324,7 +337,7 @@ class UnarySelectQuery(SelectQuery):
     def add_kinds(self, kind_refs: list[str]):
         self.add(AtomClause(subject=self.subject,
                             predicate=RDF_TYPE,
-                            variable=Variable("k"),
+                            argument=Variable("k"),
                             project=True))
         if len(kind_refs) == 1:
             self.add(AtomClause(self.subject,
@@ -339,8 +352,11 @@ class UnarySelectQuery(SelectQuery):
                 kind_union.add_constraint(RDF_TYPE, Identifier(kind), method=Comparison.EXACT)
             self.add(kind_union)
 
-    def add_clause(self, predicate, argument, method=Comparison.EXACT, project=False, optional=False):
-        self.add(AtomClause(predicate=predicate, argument=argument, method=method, project=project))
+    def add_match_clause(self, predicate, argument, method=Comparison.EXACT, project=False, optional=False):
+        self.add(AtomClause(predicate=predicate, argument=argument, method=method, project=project, optional=optional))
+
+    def add_fetch_clause(self, predicate):
+        self.add(AtomClause(predicate=predicate, method=Comparison.ANY, project=True, optional=True))
 
     def from_dict(self, data: dict):
         """
@@ -379,7 +395,7 @@ class UnarySelectQuery(SelectQuery):
         for (name, uri) in self.prefixes:
             strio.write(f"PREFIX {name}: <{uri}#>\n")
 
-        strio.write(f"SELECT distinct {self.subject}")
+        strio.write("SELECT distinct ") #{self.subject}")
         for rv in self.project_vars():
             strio.write(f" {rv} ")
         if self.is_scored():

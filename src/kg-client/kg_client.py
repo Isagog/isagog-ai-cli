@@ -5,15 +5,11 @@ Interface to Isagog KG service
 """
 
 import logging
-
-import requests
-import os
-
 from typing import Type, TypeVar
 
-from rdflib import RDFS
+import requests
 
-from kb_query import UnarySelectQuery, Clause, AtomClause, UnionClause
+from kb_query import UnarySelectQuery, UnionClause
 from kg_model import Individual, Entity, Assertion, Ontology, Attribute
 
 log = logging.getLogger("isagog-cli")
@@ -86,21 +82,28 @@ class KnowledgeBase(object):
         """
         assert (subject_id and properties)
 
-        req = {
-            "subject": subject_id,
-            "clauses": [{
-                "property": str(prop),
-                "optional": True,
-                "project": True
-            } for prop in properties]
-        }
+        # req = {
+        #     "subject": subject_id,
+        #     "clauses": [{
+        #         "property": str(prop),
+        #         "optional": True,
+        #         "project": True
+        #     } for prop in properties]
+        # }
+        #
+        # if self.dataset:
+        #     req["dataset"] = self.dataset
 
-        if self.dataset:
-            req["dataset"] = self.dataset
+        query = UnarySelectQuery(subject=subject_id)
+
+        for prop in properties:
+            query.add_fetch_clause(predicate=str(prop))
+
+        print(query.to_sparql())
 
         res = requests.post(
             url=self.route,
-            json=req,
+            json=query.to_dict(),
             headers={"Accept": "application/json"},
             timeout=30
         )
