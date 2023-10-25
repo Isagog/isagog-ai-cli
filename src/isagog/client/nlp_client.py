@@ -8,7 +8,7 @@ from nlp_model import Word, NamedEntity
 
 log = logging.getLogger("isagog-cli")
 
-config = toml.load(f"{os.environ.get('APPROOT', '.')}/config/config.toml")
+config = toml.load(f"{os.environ.get('APPROOT', '../..')}/config/config.toml")
 
 nlp_endpoint = os.environ.get("ISAGOG_AI_NLP_ROUTE", "https://ai.isagog.com/api/nlp")
 
