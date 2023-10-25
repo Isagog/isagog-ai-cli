@@ -3,7 +3,6 @@ import re
 from enum import Enum
 from io import StringIO
 
-
 from rdflib import RDF, RDFS, OWL, URIRef
 
 
@@ -110,7 +109,7 @@ class AtomClause(Clause):
                  subject: Identifier | Variable = None,
                  predicate: Identifier = None,  # no predicate variable allowed
                  argument: Value | Variable | Identifier = None,
-            #     variable: Variable = None,
+                 #     variable: Variable = None,
                  method: Comparison = Comparison.ANY,
                  project=False,
                  optional=False):
@@ -122,8 +121,9 @@ class AtomClause(Clause):
 
         self.predicate = predicate if predicate and isinstance(predicate, Identifier) \
             else Identifier(predicate) if predicate else None
-        self.argument = argument if argument else Variable(random.randint(1, 10000)) # variable  # binary predicate's second argument
-    #    self.variable = variable if variable else argument  # argument's variable
+        self.argument = argument if argument else Variable(
+            random.randint(1, 10000))  # variable  # binary predicate's second argument
+        #    self.variable = variable if variable else argument  # argument's variable
         self.method = method
         self.project = project
         self.optional = optional
@@ -167,6 +167,20 @@ class AtomClause(Clause):
             clause += " .\n"
 
         return clause
+
+    def to_dict(self) -> dict:
+        out = {
+            'property': self.predicate,
+            'method': self.method.value,
+            'project': self.project,
+            'optional': self.optional
+        }
+        if isinstance(self.argument, Value):
+            out['value'] = self.argument
+        else:
+            out['variable'] = self.argument
+
+        return out
 
     def from_dict(self, subject: Variable | Identifier, data: dict):
         """
@@ -282,6 +296,7 @@ class SelectQuery(object):
             if isinstance(c, AtomClause) and c.project:
                 _vars.append(c.argument)
         return set(_vars)
+
     #    return set([c.argument for c in self.project_clauses() if isinstance(c.argument, Variable)])
 
     def has_return_vars(self) -> bool:
@@ -395,7 +410,7 @@ class UnarySelectQuery(SelectQuery):
         for (name, uri) in self.prefixes:
             strio.write(f"PREFIX {name}: <{uri}#>\n")
 
-        strio.write("SELECT distinct ") #{self.subject}")
+        strio.write("SELECT distinct ")  # {self.subject}")
         for rv in self.project_vars():
             strio.write(f" {rv} ")
         if self.is_scored():
@@ -424,7 +439,10 @@ class UnarySelectQuery(SelectQuery):
         return strio.getvalue()
 
     def to_dict(self) -> dict:
-        out = {}
+        out = {
+            'subject': self.subject,
+        }
+
         kinds = self.get_kinds()
         if len(kinds) > 0:
             out["kinds"] = kinds
@@ -434,7 +452,8 @@ class UnarySelectQuery(SelectQuery):
         out['graph'] = self.graph
         out['limit'] = self.limit
         out['lang'] = self.lang
-        out['min_score'] = self.min_score
+        if self.min_score:
+            out['min_score'] = self.min_score
         return out
 
     def atom_clauses(self) -> list[AtomClause]:

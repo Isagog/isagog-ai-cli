@@ -12,9 +12,6 @@ import requests
 from isagog.model.kb_query import UnarySelectQuery, UnionClause
 from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute
 
-#from kg-client import UnarySelectQuery, UnionClause
-#from kg_model import Individual, Entity, Assertion, Ontology, Attribute
-
 log = logging.getLogger("isagog-cli")
 
 E = TypeVar('E', bound='Entity')
