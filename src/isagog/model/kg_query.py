@@ -1,3 +1,6 @@
+"""
+KG Query module
+"""
 import random
 import re
 from enum import Enum
@@ -23,7 +26,9 @@ class Variable(str):
     Can be an uri or a variable name
     """
 
-    def __new__(cls, value):
+    def __new__(cls, value=None):
+        if not value:
+            value = random.randint(1, 100000)
         if not (isinstance(value, str) or isinstance(value, int)):
             raise ValueError(f"Bad variable type {value}")
         if isinstance(value, int):
@@ -121,8 +126,8 @@ class AtomClause(Clause):
 
         self.predicate = predicate if predicate and isinstance(predicate, Identifier) \
             else Identifier(predicate) if predicate else None
-        self.argument = argument if argument else Variable(
-            random.randint(1, 10000))  # variable  # binary predicate's second argument
+        self.argument = argument if argument else Variable()
+        # variable  # binary predicate's second argument
         #    self.variable = variable if variable else argument  # argument's variable
         self.method = method
         self.project = project
@@ -223,23 +228,23 @@ class AtomClause(Clause):
 
 class UnionClause(Clause):
 
-    def __init__(self, subject: Identifier | Variable):
-        super().__init__(subject)
-        self.constraints = list[AtomClause]()
+    def __init__(self, subject: Identifier | Variable = None):
+        super().__init__(subject if subject else Variable())
+        self.sub_clauses = list[AtomClause]()
 
     def add_constraint(self, predicate: Identifier, argument: Value | Variable | Identifier, method=Comparison.EXACT):
-        self.constraints.append(AtomClause(self.subject, predicate, argument, method))
+        self.sub_clauses.append(AtomClause(self.subject, predicate, argument, method))
 
     def to_sparql(self) -> str:
-        match len(self.constraints):
+        match len(self.sub_clauses):
             case 0:
                 return ""
             case 1:
-                return self.constraints[0].to_sparql()
+                return self.sub_clauses[0].to_sparql()
             case _:
                 strio = StringIO()
                 strio.write("UNION {\n")
-                for constraint in self.constraints:
+                for constraint in self.sub_clauses:
                     strio.write("\t\t" + constraint.to_sparql())
                 strio.write("\t}\n")
                 return strio.getvalue()
@@ -479,31 +484,3 @@ class UnarySelectQuery(SelectQuery):
 
     def get_atom_clauses(self) -> list[AtomClause]:
         return [c for c in self.atom_clauses() if c.predicate != RDF_TYPE]
-
-# class LegacyClause(object):
-#     """
-#     Selection clause
-#     """
-#
-#     def __init__(self,
-#                  num: int,
-#                  property: str,
-#                  variable=None,
-#                  value=None,
-#                  method="any",
-#                  project=False,
-#                  optional=False,
-#                  **kwargs):
-#         """
-#         Query clause
-#         :param data: data dictionary
-#         :param num: number of clause
-#         """
-#         self.property = property
-#         self.variable = variable if variable else f"v{num}"
-#         self.value = value if value else None
-#         self.method = method
-#         self.project = project
-#         self.optional = optional
-#         if len(kwargs) > 0:
-#             raise ValueError(f"Bad clause data: keys {kwargs.keys()} not recognized")

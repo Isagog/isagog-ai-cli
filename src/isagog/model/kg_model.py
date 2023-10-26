@@ -1,5 +1,5 @@
 """
-Isagog KG model
+KG model
 """
 import io
 import logging
@@ -333,7 +333,7 @@ class Individual(Entity):
     """
 
     def __init__(self, _id: ID, **kwargs):
-        super().__init__(id, _type=OWL.NamedIndividual, **kwargs)
+        super().__init__(_id, _type=OWL.NamedIndividual, **kwargs)
         self.label = kwargs.get('label', _uri_label(self.id))
         self.kinds = kwargs.get('kinds', [OWL.Thing])
         self.comment = kwargs.get('comment', '')
