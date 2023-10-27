@@ -7,7 +7,7 @@ from typing import Type, TypeVar
 
 import requests
 
-from isagog.model.kg_query import UnarySelectQuery, UnionClause
+from isagog.model.kg_query import UnarySelectQuery, UnionClause, AtomClause, Comparison
 from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute
 
 log = logging.getLogger("isagog-cli")
@@ -154,25 +154,29 @@ class KnowledgeBase(object):
         :param search_values:
         :return:
         """
-        assert (kinds or search_values)
+        assert (kinds or (search_values and len(search_values) > 0))
         entities = []
         query = UnarySelectQuery()
         if kinds:
             query.add_kinds(kinds)
-        if search_values:
-            search_clauses = UnionClause()
+        if len(search_values) == 1:
+            attribute, value = next(iter(search_values.items()))
+            search_clause = AtomClause(predicate=attribute, argument=value, method=Comparison.REGEX)
+        else:
+            search_clause = UnionClause()
             for attribute, value in search_values.items():
-                search_clauses.add_constraint(predicate=attribute, argument=value, method="regex")
-                # req = {
-                #     "kinds": [kind],
-                #     "clauses": [
-                #         {
-                #             "property": "http://www.w3.org/2000/01/rdf-schema#label",
-                #             "value": name,
-                #             "method": "regex"
-                #         }
-                #     ]
-                # }
+                search_clause.add_clause(predicate=attribute, argument=value, method=Comparison.REGEX)
+            # req = {
+            #     "kinds": [kind],
+            #     "clauses": [
+            #         {
+            #             "property": "http://www.w3.org/2000/01/rdf-schema#label",
+            #             "value": name,
+            #             "method": "regex"
+            #         }
+            #     ]
+            # }
+        query.add(search_clause)
 
         res = requests.post(
             url=self.route,

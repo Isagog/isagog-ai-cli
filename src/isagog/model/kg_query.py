@@ -1,6 +1,7 @@
 """
 KG Query module
 """
+import json
 import random
 import re
 from enum import Enum
@@ -12,13 +13,20 @@ from rdflib import RDF, RDFS, OWL, URIRef
 class Identifier(URIRef):
     """
     Must be an uri string, possibly prefixed
+
     """
 
     def __new__(cls, value: str | URIRef):
         return super().__new__(cls, value)
 
-    def __str__(self):
-        return f"<{super().__str__()}>"
+    # def __str__(self):
+    #     return f"<{super().__str__()}>"
+
+    # def __eq__(self, other):
+    #     if isinstance(other, URIRef):
+    #         return
+    #     else:
+    #         return str(self) == str(other)
 
 
 class Variable(str):
@@ -48,20 +56,19 @@ class Variable(str):
             raise ValueError(f"Bad variable name {value}")
 
 
-class Value(object):
+class Value(str):
     """
     Can be a string or a number
     """
 
     def __init__(self, value):
-        if isinstance(value, str) and (value.startswith("<") and value.endswith(">")) or value.startswith("?"):
+        if isinstance(value, str) and ((value.startswith("<") and value.endswith(">")) or value.startswith("?")):
             raise ValueError(f"Bad value string {value}")
         self.value = value
 
     def __str__(self) -> str:
-        if isinstance(self.value, str):
-            return f"'{self.value}'"
         return str(self.value)
+
 
 
 class Comparison(Enum):
@@ -84,7 +91,11 @@ DEFAULT_PREFIXES = [("rdf", "http://www.w3.org/2000/01/rdf-schema"),
 
 class Clause(object):
 
-    def __init__(self, subject: Identifier | Variable = None):
+    def __init__(self, subject: Identifier | Variable | str = None):
+        if subject:
+            if isinstance(subject, str):
+                subject = Variable(subject) if subject.startswith("?") else Identifier(subject)
+
         self.subject = subject
         self.predicate = None
         self.argument = None
@@ -102,19 +113,29 @@ class Clause(object):
         pass
 
 
-def _validate_clause_data(data: dict) -> (bool, str):
-    if "property" not in data:
-        return False, "Property missing"
-    return True, ""
-
-
 class AtomClause(Clause):
+
+    @staticmethod
+    def _new_argument(arg) -> Value | Identifier | Variable:
+        if isinstance(arg, Variable) or isinstance(arg, Identifier) or isinstance(arg, Value):
+            return arg
+        elif isinstance(arg, URIRef):
+            return Identifier(arg)
+        elif isinstance(arg, int) or isinstance(arg, float):
+            return Value(arg)
+        else:
+            arg = str(arg)
+            if arg.startswith("?"):
+                return Variable(arg)
+            elif arg.startswith("<"):
+                return Identifier(arg)
+            else:
+                return Value(arg)
 
     def __init__(self,
                  subject: Identifier | Variable = None,
                  predicate: Identifier = None,  # no predicate variable allowed
-                 argument: Value | Variable | Identifier = None,
-                 #     variable: Variable = None,
+                 argument: Value | Identifier | Variable = None,
                  method: Comparison = Comparison.ANY,
                  project=False,
                  optional=False):
@@ -122,11 +143,15 @@ class AtomClause(Clause):
         A select clause
 
         """
+
+        assert predicate and argument
+
         super().__init__(subject)
+
 
         self.predicate = predicate if predicate and isinstance(predicate, Identifier) \
             else Identifier(predicate) if predicate else None
-        self.argument = argument if argument else Variable()
+        self.argument = self._new_argument(argument) if argument else Variable()
         # variable  # binary predicate's second argument
         #    self.variable = variable if variable else argument  # argument's variable
         self.method = method
@@ -175,6 +200,7 @@ class AtomClause(Clause):
 
     def to_dict(self) -> dict:
         out = {
+            'type': "atomic",
             'property': self.predicate,
             'method': self.method.value,
             'project': self.project,
@@ -195,6 +221,9 @@ class AtomClause(Clause):
         self.subject = subject
         for key, val in data.items():
             match key:
+                case 'type':
+                    if val != 'atomic':
+                        raise ValueError("wrong clause type")
                 case 'property':
                     self.predicate = Identifier(val)
                 case 'value':
@@ -219,35 +248,71 @@ class AtomClause(Clause):
         self._temp_vars += 1
         return Variable(self._temp_vars)
 
-    @classmethod
-    def new(cls, subject: Variable, rdata: dict) -> Clause:
-        c = AtomClause()
-        c.from_dict(subject, rdata)
-        return c
+    # @classmethod
+    # def new(cls, subject: Variable, rdata: dict) -> Clause:
+    #     c = AtomClause()
+    #     c.from_dict(subject, rdata)
+    #     return c
 
 
 class UnionClause(Clause):
+    """
+    A list of atomic clauses on the same subject, which are evaluated in 'or'
+    """
 
-    def __init__(self, subject: Identifier | Variable = None):
+    @staticmethod
+    def _validate_union_clauses(clauses: list[AtomClause]) -> bool:
+        if not clauses:
+            return True
+        subject = clauses[0].subject
+        return all(clause.subject == subject for clause in clauses)
+
+    def __init__(self,
+                 subject: Identifier | Variable = None,
+                 atom_clauses: list[AtomClause] = None):
         super().__init__(subject if subject else Variable())
-        self.sub_clauses = list[AtomClause]()
+        if not atom_clauses:
+            atom_clauses = list[AtomClause]()
+        else:
+            if not self._validate_union_clauses(atom_clauses):
+                raise ValueError("Invalid union clauses")
+        self.atom_clauses = atom_clauses
 
-    def add_constraint(self, predicate: Identifier, argument: Value | Variable | Identifier, method=Comparison.EXACT):
-        self.sub_clauses.append(AtomClause(self.subject, predicate, argument, method))
+    def add_clause(self,
+                   predicate: Identifier,
+                   argument: Value | Variable | Identifier,
+                   method=Comparison.EXACT):
+        self.atom_clauses.append(AtomClause(self.subject, predicate, argument, method))
 
     def to_sparql(self) -> str:
-        match len(self.sub_clauses):
+        match len(self.atom_clauses):
             case 0:
                 return ""
             case 1:
-                return self.sub_clauses[0].to_sparql()
+                return self.atom_clauses[0].to_sparql()
             case _:
                 strio = StringIO()
                 strio.write("UNION {\n")
-                for constraint in self.sub_clauses:
+                for constraint in self.atom_clauses:
                     strio.write("\t\t" + constraint.to_sparql())
                 strio.write("\t}\n")
                 return strio.getvalue()
+
+    def to_dict(self) -> dict:
+        out = {
+            'type': "union",
+            'subject': self.subject,
+            'clauses': [c.to_dict() for c in self.atom_clauses]
+        }
+        return out
+
+    def from_dict(self, subject: Variable | Identifier, data: dict):
+        self.subject = subject
+        for atom_dict in data.get('clauses', []):
+            atom = AtomClause()
+            subject = atom_dict.get('subject', ValueError("Malformed union clause"))
+            atom.from_dict(subject=subject, data=atom_dict)
+            self.atom_clauses.append(atom)
 
 
 class SelectQuery(object):
@@ -256,7 +321,6 @@ class SelectQuery(object):
     """
 
     def __init__(self,
-                 dataset: str,
                  prefixes: list[(str, str)],
                  clauses: list[Clause],
                  graph: str,
@@ -268,7 +332,7 @@ class SelectQuery(object):
         Buils a selecion query
         @param clauses: a list of selection clauses
         """
-        self.dataset = dataset
+
         if prefixes is None:
             prefixes = DEFAULT_PREFIXES
         self.prefixes = prefixes
@@ -320,11 +384,22 @@ class UnarySelectQuery(SelectQuery):
     By convention, the first variable is the subject, others are subject's attributes and relations
     """
 
+    @staticmethod
+    def _new_id(id_obj) -> Variable | Identifier:
+        if isinstance(id_obj, Identifier) or isinstance(id_obj, Variable):
+            return id_obj
+        else:
+            id_obj = str(id_obj)
+            if id_obj.startswith("?"):
+                return Variable(id_obj)
+            else:
+                return Identifier(id_obj)
+
     def __init__(self,
                  subject=None,
-                 dataset=None,
-                 prefixes=None,
-                 clauses: list[AtomClause] = None,
+                 kinds: list[str] = None,
+                 prefixes: dict = None,
+                 clauses: list[Clause] = None,
                  graph="defaultGraph",
                  limit=-1,
                  lang="en",
@@ -335,7 +410,6 @@ class UnarySelectQuery(SelectQuery):
         @param clauses: a list of selection clauses
         """
         super().__init__(
-            dataset=dataset,
             prefixes=prefixes,
             clauses=clauses,
             graph=graph,
@@ -345,9 +419,11 @@ class UnarySelectQuery(SelectQuery):
         )
 
         if subject:
-            self.subject = subject if isinstance(subject, Identifier) else Identifier(subject)
+            self.subject = self._new_id(subject)
         else:
             self.subject = Variable("i")
+        if kinds:
+            self.add_kinds(kinds)
 
     def add(self, clause: Clause):
         if clause.subject is None:
@@ -360,16 +436,16 @@ class UnarySelectQuery(SelectQuery):
                             argument=Variable("k"),
                             project=True))
         if len(kind_refs) == 1:
-            self.add(AtomClause(self.subject,
-                                RDF_TYPE,
-                                Identifier(kind_refs[0]),
+            self.add(AtomClause(subject=self.subject,
+                                predicate=RDF_TYPE,
+                                argument=kind_refs[0],
                                 method=Comparison.EXACT,
                                 project=False,
                                 optional=False))
         elif len(kind_refs) > 1:
-            kind_union = UnionClause(self.subject)
+            kind_union = UnionClause(subject=self.subject)
             for kind in kind_refs:
-                kind_union.add_constraint(RDF_TYPE, Identifier(kind), method=Comparison.EXACT)
+                kind_union.add_clause(predicate=RDF_TYPE, argument=kind, method=Comparison.EXACT)
             self.add(kind_union)
 
     def add_match_clause(self, predicate, argument, method=Comparison.EXACT, project=False, optional=False):
@@ -385,17 +461,22 @@ class UnarySelectQuery(SelectQuery):
         try:
             for key, val in data.items():
                 match key:
+                    case 'subject':
+                        self.subject = self._new_id(val)
                     case 'kinds':
                         self.add_kinds(val)
                     case 'clauses':
                         for clause_data in val:
-                            valid, reason = _validate_clause_data(clause_data)
-                            if valid:
-                                clause = AtomClause()
-                                clause.from_dict(subject=self.subject, data=clause_data)
-                                self.add(clause)
-                            else:
-                                raise ValueError(reason)
+                            match clause_data.get('type', 'unknown'):
+                                case 'atomic':
+                                    clause = AtomClause()
+                                case 'union':
+                                    clause = UnionClause()
+                                case _:
+                                    raise ValueError(f"Clause type unknown")
+                            subject = clause_data.get('subject', self.subject)
+                            clause.from_dict(subject=subject, data=clause_data)
+                            self.add(clause)
                     case 'graph':
                         self.graph = str(val)
                     case 'limit':
@@ -451,9 +532,7 @@ class UnarySelectQuery(SelectQuery):
         kinds = self.get_kinds()
         if len(kinds) > 0:
             out["kinds"] = kinds
-        if self.dataset:
-            out["dataset"] = self.dataset
-        out["clauses"] = [c.to_dict() for c in self.get_atom_clauses()]
+        out["clauses"] = [c.to_dict() for c in self.property_clauses()]
         out['graph'] = self.graph
         out['limit'] = self.limit
         out['lang'] = self.lang
@@ -477,10 +556,22 @@ class UnarySelectQuery(SelectQuery):
         return q
 
     def is_scored(self) -> bool:
-        return next(filter(lambda c: c.method == Comparison.KEYWORD, self.clauses), None) is not None
+        return next(filter(lambda c: isinstance(c, AtomClause) and c.method == Comparison.KEYWORD, self.clauses),
+                    None) is not None
 
     def get_kinds(self) -> list[Identifier]:
-        return [c.argument for c in self.atom_clauses() if c.predicate == RDF_TYPE]
+        atom_clauses = self.atom_clauses()
+        rt = []
+        for c in atom_clauses:
+            if c.predicate == RDF_TYPE and isinstance(c.argument, Identifier):
+                rt.append(c.argument)
+        return rt
 
-    def get_atom_clauses(self) -> list[AtomClause]:
+    def atom_property_clauses(self) -> list[AtomClause]:
         return [c for c in self.atom_clauses() if c.predicate != RDF_TYPE]
+
+    def union_clauses(self) -> list[UnionClause]:
+        return [c for c in self.clauses if isinstance(c, UnionClause)]
+
+    def property_clauses(self):
+        return self.atom_property_clauses() + self.union_clauses()
