@@ -189,7 +189,7 @@ class AtomClause(Clause):
                 clause = f"{self.subject} {self.predicate.n3()} {tmp_var}\n"
                 clause += f'\n\t\tFILTER  regex({tmp_var}, "{self.argument}", "i")'
             case Comparison.KEYWORD:
-                clause += f'({self.subject} ?score) text:query "{self.argument}"'  # todo
+                clause += f'({self.subject} ?score) text:query "{self.argument}"'
             case Comparison.GREATER:
                 var = self.variable if self.variable else Variable()  # self._temp_var()
                 clause +=  f"{self.subject} {self.predicate.n3()} {var}\n"
