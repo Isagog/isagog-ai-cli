@@ -239,7 +239,7 @@ class AtomClause(Clause):
                 case 'value':
                     self.argument = Value(val)
                     self.variable = Variable()  # self._temp_var()
-                case 'identifier':
+                case 'subject':
                     self.argument = Identifier(val)
                 case 'variable':
                     self.variable = Variable(val)
