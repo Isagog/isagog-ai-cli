@@ -29,18 +29,25 @@ class Identifier(URIRef):
     #         return str(self) == str(other)
 
 
+_VAR_COUNT = 0
+
+
 class Variable(str):
     """
     Can be an uri or a variable name
     """
 
     def __new__(cls, value=None):
+        global _VAR_COUNT
         if not value:
-            value = random.randint(1, 100000)
+            value = _VAR_COUNT
+            _VAR_COUNT += 1
         if not (isinstance(value, str) or isinstance(value, int)):
             raise ValueError(f"Bad variable type {value}")
         if isinstance(value, int):
-            return super().__new__(cls, f'?tmp_{value}')
+            assert value == (_VAR_COUNT - 1)
+            _VAR_COUNT = value + 1
+            return super().__new__(cls, f'?v_{value}')
 
         if value.startswith("?"):
             pattern = r'^[a-zA-Z0-9_?]+$'
@@ -68,7 +75,6 @@ class Value(str):
 
     def __str__(self) -> str:
         return str(self.value)
-
 
 
 class Comparison(Enum):
@@ -132,10 +138,17 @@ class AtomClause(Clause):
             else:
                 return Value(arg)
 
+    def n3(self) -> str:
+        subj = self.subject.n3() if isinstance(self.subject, Identifier) else self.subject
+        pred = self.predicate.n3()
+        val = self.argument.n3() if isinstance(self.argument, Identifier) else str(self.argument)
+        return f"{subj} {pred} {val}"
+
     def __init__(self,
                  subject: Identifier | Variable = None,
                  predicate: Identifier = None,  # no predicate variable allowed
                  argument: Value | Identifier | Variable = None,
+                 variable: Variable = None,
                  method: Comparison = Comparison.ANY,
                  project=False,
                  optional=False):
@@ -144,19 +157,16 @@ class AtomClause(Clause):
 
         """
 
-        assert predicate and argument
-
         super().__init__(subject)
-
-
         self.predicate = predicate if predicate and isinstance(predicate, Identifier) \
             else Identifier(predicate) if predicate else None
         self.argument = self._new_argument(argument) if argument else Variable()
-        # variable  # binary predicate's second argument
-        #    self.variable = variable if variable else argument  # argument's variable
+        #if variable:  # binary predicate's second argument
+        self.variable = variable  # else argument  # argument's variable
         self.method = method
         self.project = project
         self.optional = optional
+        self.variable = None
         self._temp_vars = 0
 
     def is_defined(self) -> bool:
@@ -173,21 +183,21 @@ class AtomClause(Clause):
 
         match self.method:
             case Comparison.EXACT | Comparison.ANY:
-                clause += f"{self.subject} {self.predicate} {self.argument}"
+                clause += self.n3()  # f"{self.subject} {self.predicate} {self.argument}"
             case Comparison.REGEX:
-                tmp_var = self._temp_var()
-                clause = f"{self.subject} {self.predicate} {tmp_var}\n"
-                clause += f'\t\tFILTER  regex({tmp_var}, {self.argument}, "i")'
+                tmp_var = Variable()  # self._temp_var()
+                clause = f"{self.subject} {self.predicate.n3()} {tmp_var}\n"
+                clause += f'\n\t\tFILTER  regex({tmp_var}, "{self.argument}", "i")'
             case Comparison.KEYWORD:
-                clause += f'({self.subject} ?score) text:query {self.argument}'
+                clause += f'({self.subject} ?score) text:query "{self.argument}"'  # todo
             case Comparison.GREATER:
-                var = self.variable if self.variable else self._temp_var()
-                clause += f"{self.subject} {self.predicate} {var}\n"
-                clause += f'\t\tFILTER ({var} > {self.argument})'
+                var = self.variable if self.variable else Variable()  # self._temp_var()
+                clause +=  f"{self.subject} {self.predicate.n3()} {var}\n"
+                clause += f'\t\tFILTER ({var} > "{self.argument}")'
             case Comparison.LESSER:
-                var = self._temp_var()
-                clause += f'{self.subject} {self.predicate} {var}\n'
-                clause += f'FILTER ({var} < {self.argument})'
+                var = Variable()  # self._temp_var()
+                clause += f'{self.subject} {self.predicate.n3()} {var}\n'
+                clause += f'FILTER ({var} < "{self.argument}")'
             case _:
                 raise ValueError(self.method)
 
@@ -228,7 +238,7 @@ class AtomClause(Clause):
                     self.predicate = Identifier(val)
                 case 'value':
                     self.argument = Value(val)
-                    self.variable = self._temp_var()
+                    self.variable = Variable()  # self._temp_var()
                 case 'identifier':
                     self.argument = Identifier(val)
                 case 'variable':
@@ -310,7 +320,7 @@ class UnionClause(Clause):
         self.subject = subject
         for atom_dict in data.get('clauses', []):
             atom = AtomClause()
-            subject = atom_dict.get('subject', ValueError("Malformed union clause"))
+            subject = atom_dict.get('subject', self.subject)
             atom.from_dict(subject=subject, data=atom_dict)
             self.atom_clauses.append(atom)
 
@@ -360,10 +370,13 @@ class SelectQuery(object):
         """
         _vars = []
         for c in self.clauses:
-            if isinstance(c.subject, Variable):
-                _vars.append(c.subject)
+            # if isinstance(c.subject, Variable):
+            #     _vars.append(c.subject)
             if isinstance(c, AtomClause) and c.project:
-                _vars.append(c.argument)
+                if isinstance(c.argument, Variable):
+                    _vars.append(c.argument)
+                if isinstance(c.subject, Variable):
+                    _vars.append(c.subject)
         return set(_vars)
 
     #    return set([c.argument for c in self.project_clauses() if isinstance(c.argument, Variable)])
@@ -438,14 +451,14 @@ class UnarySelectQuery(SelectQuery):
         if len(kind_refs) == 1:
             self.add(AtomClause(subject=self.subject,
                                 predicate=RDF_TYPE,
-                                argument=kind_refs[0],
+                                argument=Identifier(kind_refs[0]),
                                 method=Comparison.EXACT,
                                 project=False,
                                 optional=False))
         elif len(kind_refs) > 1:
             kind_union = UnionClause(subject=self.subject)
             for kind in kind_refs:
-                kind_union.add_clause(predicate=RDF_TYPE, argument=kind, method=Comparison.EXACT)
+                kind_union.add_clause(predicate=RDF_TYPE, argument=Identifier(kind), method=Comparison.EXACT)
             self.add(kind_union)
 
     def add_match_clause(self, predicate, argument, method=Comparison.EXACT, project=False, optional=False):
@@ -467,7 +480,7 @@ class UnarySelectQuery(SelectQuery):
                         self.add_kinds(val)
                     case 'clauses':
                         for clause_data in val:
-                            match clause_data.get('type', 'unknown'):
+                            match clause_data.get('type', 'atomic'):
                                 case 'atomic':
                                     clause = AtomClause()
                                 case 'union':
