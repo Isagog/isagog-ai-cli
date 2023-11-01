@@ -1,7 +1,6 @@
 """
 KG Query module
 """
-import json
 import random
 import re
 from enum import Enum
@@ -163,7 +162,8 @@ class AtomClause(Clause):
         self.project = project
         self.optional = optional
         self.variable = None
-       # self._temp_vars = 0
+
+    # self._temp_vars = 0
 
     def is_defined(self) -> bool:
         return self.subject is not None and self.predicate is not None and self.argument is not None
@@ -253,16 +253,6 @@ class AtomClause(Clause):
                     self.optional = bool(val)
                 case _:
                     raise ValueError(f"Invalid clause key {key}")
-
-    # def _temp_var(self) -> Variable:
-    #     self._temp_vars += 1
-    #     return Variable(self._temp_vars)
-
-    # @classmethod
-    # def new(cls, subject: Variable, rdata: dict) -> Clause:
-    #     c = AtomClause()
-    #     c.from_dict(subject, rdata)
-    #     return c
 
 
 class UnionClause(Clause):
@@ -376,8 +366,6 @@ class SelectQuery(object):
                 if isinstance(c.subject, Variable):
                     _vars.append(c.subject)
         return set(_vars)
-
-    #    return set([c.argument for c in self.project_clauses() if isinstance(c.argument, Variable)])
 
     def has_return_vars(self) -> bool:
         return len(self.project_vars()) > 0
@@ -556,9 +544,6 @@ class UnarySelectQuery(SelectQuery):
 
     def has_unions(self):
         return len(self.union_clauses()) > 0
-
-    def union_clauses(self) -> list[UnionClause]:
-        return [c for c in self.clauses if isinstance(c, UnionClause)]
 
     @classmethod
     def new(cls, rdata: dict) -> SelectQuery:

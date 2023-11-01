@@ -1,11 +1,10 @@
 """
 KG model
 """
-import io
 import logging
 from typing import IO, Optional, TextIO, Any
 
-from rdflib import OWL, Graph, Literal, RDF, URIRef, RDFS
+from rdflib import OWL, Graph, RDF, URIRef, RDFS
 
 log = logging.getLogger("isagog-cli")
 
@@ -252,16 +251,6 @@ class Ontology(Graph):
                 break
         return found
 
-
-# class Reference(Entity):
-#     """
-#     Reference instance as defined in
-#     isagog_api/openapi/isagog_kg.openapi.yaml
-#     """
-#
-#     def __init__(self, data: dict):
-#         super().__init__(data, OWL.Axiom)
-#         self.kinds = data.get('kinds', [])
 
 class AttributeInstance(Assertion):
     """

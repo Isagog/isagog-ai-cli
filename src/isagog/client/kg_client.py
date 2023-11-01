@@ -74,7 +74,6 @@ class KnowledgeBase(object):
         Returns entity properties
 
         :param subject_id:
-        :param dataset: the dataset to fetch
         :param properties: the queried properties
         :return: a list of dictionaries { property: values }
         """
