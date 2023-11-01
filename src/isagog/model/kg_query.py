@@ -29,25 +29,19 @@ class Identifier(URIRef):
     #         return str(self) == str(other)
 
 
-_VAR_COUNT = 0
-
-
 class Variable(str):
     """
     Can be an uri or a variable name
     """
 
     def __new__(cls, value=None):
-        global _VAR_COUNT
+
         if not value:
-            value = _VAR_COUNT
-            _VAR_COUNT += 1
+            value = random.randint(0, 1000000)  # assume that conflicts are negligible
         if not (isinstance(value, str) or isinstance(value, int)):
             raise ValueError(f"Bad variable type {value}")
         if isinstance(value, int):
-            assert value == (_VAR_COUNT - 1)
-            _VAR_COUNT = value + 1
-            return super().__new__(cls, f'?v_{value}')
+            return super().__new__(cls, f'?{hex(value)}')
 
         if value.startswith("?"):
             pattern = r'^[a-zA-Z0-9_?]+$'
@@ -122,7 +116,7 @@ class Clause(object):
 class AtomClause(Clause):
 
     @staticmethod
-    def _new_argument(arg) -> Value | Identifier | Variable:
+    def _instantiate_argument(arg) -> Value | Identifier | Variable:
         if isinstance(arg, Variable) or isinstance(arg, Identifier) or isinstance(arg, Value):
             return arg
         elif isinstance(arg, URIRef):
@@ -131,9 +125,9 @@ class AtomClause(Clause):
             return Value(arg)
         else:
             arg = str(arg)
-            if arg.startswith("?"):
+            if arg.startswith('?'):
                 return Variable(arg)
-            elif arg.startswith("<"):
+            elif arg.startswith('<') or ':' in arg[0, 10]:
                 return Identifier(arg)
             else:
                 return Value(arg)
@@ -158,16 +152,18 @@ class AtomClause(Clause):
         """
 
         super().__init__(subject)
-        self.predicate = predicate if predicate and isinstance(predicate, Identifier) \
-            else Identifier(predicate) if predicate else None
-        self.argument = self._new_argument(argument) if argument else Variable()
-        #if variable:  # binary predicate's second argument
+        # if predicate:
+        #     self.predicate = Identifier(predicate) if isinstance(predicate,str) else predicate
+        # else:
+        self.predicate = predicate
+        self.argument = self._instantiate_argument(argument) if argument else None
+        # if variable:  # binary predicate's second argument
         self.variable = variable  # else argument  # argument's variable
         self.method = method
         self.project = project
         self.optional = optional
         self.variable = None
-        self._temp_vars = 0
+       # self._temp_vars = 0
 
     def is_defined(self) -> bool:
         return self.subject is not None and self.predicate is not None and self.argument is not None
@@ -192,7 +188,7 @@ class AtomClause(Clause):
                 clause += f'({self.subject} ?score) text:query "{self.argument}"'
             case Comparison.GREATER:
                 var = self.variable if self.variable else Variable()  # self._temp_var()
-                clause +=  f"{self.subject} {self.predicate.n3()} {var}\n"
+                clause += f"{self.subject} {self.predicate.n3()} {var}\n"
                 clause += f'\t\tFILTER ({var} > "{self.argument}")'
             case Comparison.LESSER:
                 var = Variable()  # self._temp_var()
@@ -218,8 +214,10 @@ class AtomClause(Clause):
         }
         if isinstance(self.argument, Value):
             out['value'] = self.argument
-        else:
+        elif isinstance(self.argument, Variable):
             out['variable'] = self.argument
+        else:
+            out['identifier'] = self.argument
 
         return out
 
@@ -238,7 +236,9 @@ class AtomClause(Clause):
                     self.predicate = Identifier(val)
                 case 'value':
                     self.argument = Value(val)
-                    self.variable = Variable()  # self._temp_var()
+                    # self.variable = Variable()
+                case 'identifier':
+                    self.argument = Identifier(val)
                 case 'subject':
                     self.argument = Identifier(val)
                 case 'variable':
@@ -254,9 +254,9 @@ class AtomClause(Clause):
                 case _:
                     raise ValueError(f"Invalid clause key {key}")
 
-    def _temp_var(self) -> Variable:
-        self._temp_vars += 1
-        return Variable(self._temp_vars)
+    # def _temp_var(self) -> Variable:
+    #     self._temp_vars += 1
+    #     return Variable(self._temp_vars)
 
     # @classmethod
     # def new(cls, subject: Variable, rdata: dict) -> Clause:
@@ -370,8 +370,6 @@ class SelectQuery(object):
         """
         _vars = []
         for c in self.clauses:
-            # if isinstance(c.subject, Variable):
-            #     _vars.append(c.subject)
             if isinstance(c, AtomClause) and c.project:
                 if isinstance(c.argument, Variable):
                     _vars.append(c.argument)
