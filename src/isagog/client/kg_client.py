@@ -111,38 +111,6 @@ class KnowledgeBase(object):
             log.warning("Query of entity %s failed due to %s", subject_id, res.reason)
             return []
 
-    # def search_individuals(self,
-    #                              references: dict[str, str]) -> list[Individual]:
-    #    entities = []
-    #    for name, kind in references.items():
-    #        req = {
-    #            "kinds": [kind],
-    #            "clauses": [
-    #                {
-    #                    "property": "http://www.w3.org/2000/01/rdf-schema#label",
-    #                    "value": name,
-    #                    "method": "regex"
-    #                }
-    #            ]
-    #        }
-    #
-    #        if self.dataset:
-    #            req["dataset"] = self.dataset
-    #
-    #        res = requests.post(
-    #            url=self.route,
-    #            json=req,
-    #            headers={"Accept": "application/json"},
-    #            timeout=30
-    #        )
-    #
-    #        if res.ok:
-    #            entities.extend([Individual(r) for r in res.json()])
-    #        else:
-    #            log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
-    #
-    #    return entities
-
     def search_individuals(self,
                            kinds: list[str] = None,
                            search_values: dict[Attribute, str] = None,
@@ -165,16 +133,7 @@ class KnowledgeBase(object):
             search_clause = UnionClause()
             for attribute, value in search_values.items():
                 search_clause.add_clause(predicate=attribute, argument=value, method=Comparison.REGEX)
-            # req = {
-            #     "kinds": [kind],
-            #     "clauses": [
-            #         {
-            #             "property": "http://www.w3.org/2000/01/rdf-schema#label",
-            #             "value": name,
-            #             "method": "regex"
-            #         }
-            #     ]
-            # }
+
         query.add(search_clause)
 
         res = requests.post(
@@ -190,3 +149,18 @@ class KnowledgeBase(object):
             log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
 
         return entities
+
+    def query_individual(self, query: UnarySelectQuery) -> list[Individual]:
+
+        res = requests.post(
+            url=self.route,
+            json=query.to_dict(),
+            headers={"Accept": "application/json"},
+            timeout=30
+        )
+
+        if res.ok:
+            return [Individual(r.get('id'), **r) for r in res.json()]
+        else:
+            log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
+            return []

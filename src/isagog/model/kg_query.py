@@ -236,7 +236,6 @@ class AtomClause(Clause):
                     self.predicate = Identifier(val)
                 case 'value':
                     self.argument = Value(val)
-                    # self.variable = Variable()
                 case 'identifier':
                     self.argument = Identifier(val)
                 case 'subject':
