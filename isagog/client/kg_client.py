@@ -1,7 +1,5 @@
 """
-
 Interface to Isagog KG service
-
 """
 
 import logging
@@ -9,11 +7,8 @@ from typing import Type, TypeVar
 
 import requests
 
-from isagog.model.kb_query import UnarySelectQuery, UnionClause
+from isagog.model.kg_query import UnarySelectQuery, UnionClause, AtomClause, Comparison
 from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute
-
-#from kg-client import UnarySelectQuery, UnionClause
-#from kg_model import Individual, Entity, Assertion, Ontology, Attribute
 
 log = logging.getLogger("isagog-cli")
 
@@ -37,25 +32,25 @@ class KnowledgeBase(object):
         assert route
         self.route = route
         self.dataset = dataset
+        self.ontology = ontology
 
     def fetch_entity(self,
-                     id: str,
+                     _id: str,
                      entity_type: Type[E] = Entity
                      ) -> E | None:
         """
         Gets all individual entity data from the kg
 
-        :param id: the entity identifier
+        :param _id: the entity identifier
         :param entity_type: the entity type (default: Entity)
-        :param limit: limit of the number of assertions fetched (default: no limit)
         """
 
-        assert id
+        assert _id
 
         if not issubclass(entity_type, Entity):
             raise ValueError(f"{entity_type} not an Entity")
 
-        params = f"id={id}&expand=true"
+        params = f"id={_id}&expand=true"
         if self.dataset:
             params += f"&dataset={self.dataset}"
 
@@ -65,44 +60,29 @@ class KnowledgeBase(object):
             headers={"Accept": "application/json"},
         )
         if res.ok:
-            log.debug("Fetched %s", id)
+            log.debug("Fetched %s", _id)
             return entity_type(res.json())
         else:
-            log.error("Couldn't fetch %s due to %s", id, res.reason)
+            log.error("Couldn't fetch %s due to %s", _id, res.reason)
             return None
 
     def query_assertions(self,
                          subject_id: str,
                          properties: list[str]
-                         ) -> list[Assertion]:  # todo: why is this a list and not a dict?
+                         ) -> list[Assertion]:
         """
         Returns entity properties
 
         :param subject_id:
-        :param dataset: the dataset to fetch
         :param properties: the queried properties
         :return: a list of dictionaries { property: values }
         """
         assert (subject_id and properties)
 
-        # req = {
-        #     "subject": subject_id,
-        #     "clauses": [{
-        #         "property": str(prop),
-        #         "optional": True,
-        #         "project": True
-        #     } for prop in properties]
-        # }
-        #
-        # if self.dataset:
-        #     req["dataset"] = self.dataset
-
         query = UnarySelectQuery(subject=subject_id)
 
         for prop in properties:
             query.add_fetch_clause(predicate=str(prop))
-
-        print(query.to_sparql())
 
         res = requests.post(
             url=self.route,
@@ -131,38 +111,6 @@ class KnowledgeBase(object):
             log.warning("Query of entity %s failed due to %s", subject_id, res.reason)
             return []
 
-    # def search_named_individuals(self,
-    #                              references: dict[str, str]) -> list[Individual]:
-    #    entities = []
-    #    for name, kind in references.items():
-    #        req = {
-    #            "kinds": [kind],
-    #            "clauses": [
-    #                {
-    #                    "property": "http://www.w3.org/2000/01/rdf-schema#label",
-    #                    "value": name,
-    #                    "method": "regex"
-    #                }
-    #            ]
-    #        }
-    #
-    #        if self.dataset:
-    #            req["dataset"] = self.dataset
-    #
-    #        res = requests.post(
-    #            url=self.route,
-    #            json=req,
-    #            headers={"Accept": "application/json"},
-    #            timeout=30
-    #        )
-    #
-    #        if res.ok:
-    #            entities.extend([Individual(r) for r in res.json()])
-    #        else:
-    #            log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
-    #
-    #    return entities
-
     def search_individuals(self,
                            kinds: list[str] = None,
                            search_values: dict[Attribute, str] = None,
@@ -173,25 +121,20 @@ class KnowledgeBase(object):
         :param search_values:
         :return:
         """
-        assert (kinds or search_values)
+        assert (kinds or (search_values and len(search_values) > 0))
         entities = []
         query = UnarySelectQuery()
         if kinds:
             query.add_kinds(kinds)
-        if search_values:
-            search_clauses = UnionClause()
+        if len(search_values) == 1:
+            attribute, value = next(iter(search_values.items()))
+            search_clause = AtomClause(predicate=attribute, argument=value, method=Comparison.REGEX)
+        else:
+            search_clause = UnionClause()
             for attribute, value in search_values.items():
-                search_clauses.add_constraint(predicate=attribute, argument=value, method="regex")
-                # req = {
-                #     "kinds": [kind],
-                #     "clauses": [
-                #         {
-                #             "property": "http://www.w3.org/2000/01/rdf-schema#label",
-                #             "value": name,
-                #             "method": "regex"
-                #         }
-                #     ]
-                # }
+                search_clause.add_clause(predicate=attribute, argument=value, method=Comparison.REGEX)
+
+        query.add(search_clause)
 
         res = requests.post(
             url=self.route,
@@ -206,3 +149,18 @@ class KnowledgeBase(object):
             log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
 
         return entities
+
+    def query_individual(self, query: UnarySelectQuery) -> list[Individual]:
+
+        res = requests.post(
+            url=self.route,
+            json=query.to_dict(),
+            headers={"Accept": "application/json"},
+            timeout=30
+        )
+
+        if res.ok:
+            return [Individual(r.get('id'), **r) for r in res.json()]
+        else:
+            log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
+            return []

@@ -4,7 +4,7 @@ import requests
 import toml
 import os
 
-from nlp_model import Word, NamedEntity
+from isagog.model.nlp_model import Word, NamedEntity
 
 log = logging.getLogger("isagog-cli")
 

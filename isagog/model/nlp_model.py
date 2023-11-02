@@ -1,5 +1,5 @@
 """
-Isagog NLP model
+NLP model
 """
 from typing import NamedTuple
 
