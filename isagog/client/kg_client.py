@@ -71,7 +71,7 @@ class KnowledgeBase(object):
                          properties: list[str]
                          ) -> list[Assertion]:
         """
-        Returns entity properties
+        Returns entity properties, if any
 
         :param subject_id:
         :param properties: the queried properties
