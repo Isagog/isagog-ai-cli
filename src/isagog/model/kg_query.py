@@ -126,7 +126,7 @@ class AtomClause(Clause):
             arg = str(arg)
             if arg.startswith('?'):
                 return Variable(arg)
-            elif arg.startswith('<') or ':' in arg[0, 10]:
+            elif arg.startswith('<') or ':' in arg[:8]:
                 return Identifier(arg)
             else:
                 return Value(arg)

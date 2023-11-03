@@ -61,7 +61,7 @@ class KnowledgeBase(object):
         )
         if res.ok:
             log.debug("Fetched %s", _id)
-            return entity_type(res.json())
+            return entity_type(_id, **res.json())
         else:
             log.error("Couldn't fetch %s due to %s", _id, res.reason)
             return None

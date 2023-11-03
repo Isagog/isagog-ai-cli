@@ -84,15 +84,17 @@ class Annotation(Identified):
         Identified.__init__(self, _id)
 
 
+ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.Class]
+
+
 class Entity(Identified):
     """
     Any identified knowledge entity, either predicative or individual
     """
-    ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.Class]
 
     def __init__(self, _id: ID, _type: str = None, **kwargs):
         super().__init__(_id)
-        assert (_type and _type in Entity.ALLOWED_TYPES)
+        assert (_type and _type in ALLOWED_TYPES)
         self.type = _type
 
     def to_dict(self) -> dict:
@@ -326,7 +328,8 @@ class Individual(Entity):
         self.label = kwargs.get('label', _uri_label(self.id))
         self.kinds = kwargs.get('kinds', [OWL.Thing])
         self.comment = kwargs.get('comment', '')
-        self.attributes = [AttributeInstance(**a_data) for a_data in kwargs.get('attributes', list[AttributeInstance]())]
+        self.attributes = [AttributeInstance(**a_data) for a_data in
+                           kwargs.get('attributes', list[AttributeInstance]())]
         self.relations = [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())]
         self.score = float(kwargs.get('score', 0.0))
 
@@ -354,3 +357,13 @@ class Individual(Entity):
 
     def has_score(self) -> bool:
         return self.score is not None
+
+    def __dict__(self) -> dict:
+        return {
+            "id": self.id,
+            "label": self.label,
+            "kinds": self.kinds,
+            "comment": self.comment,
+            "attributes": self.attributes,
+            "relations": self.relations,
+        }
