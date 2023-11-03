@@ -358,12 +358,3 @@ class Individual(Entity):
     def has_score(self) -> bool:
         return self.score is not None
 
-    def __dict__(self) -> dict:
-        return {
-            "id": self.id,
-            "label": self.label,
-            "kinds": self.kinds,
-            "comment": self.comment,
-            "attributes": self.attributes,
-            "relations": self.relations,
-        }

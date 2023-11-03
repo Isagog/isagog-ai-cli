@@ -102,13 +102,13 @@ class Clause(object):
     def to_sparql(self) -> str:
         pass
 
-    def to_dict(self) -> dict:
+    def to_dict(self, version: str = None) -> dict:
         pass
 
     def is_defined(self) -> bool:
         return self.subject is not None
 
-    def from_dict(self, subject: Variable | Identifier, data: dict):
+    def from_dict(self, subject: Variable | Identifier, data: dict, protocol: str = None):
         pass
 
 
@@ -204,7 +204,7 @@ class AtomClause(Clause):
 
         return clause
 
-    def to_dict(self) -> dict:
+    def to_dict(self, version: str = None) -> dict:
         out = {
             'type': "atomic",
             'property': self.predicate,
@@ -219,9 +219,12 @@ class AtomClause(Clause):
         else:
             out['identifier'] = self.argument
 
+        if version and version == "v1.0.0":
+            del out['type']
+
         return out
 
-    def from_dict(self, subject: Variable | Identifier, data: dict):
+    def from_dict(self, subject: Variable | Identifier, data: dict, protocol: str = None):
         """
         Openapi spec:  components.schemas.Clause
         """
@@ -297,15 +300,17 @@ class UnionClause(Clause):
                 strio.write("\t}\n")
                 return strio.getvalue()
 
-    def to_dict(self) -> dict:
+    def to_dict(self, version: str = None) -> dict:
         out = {
             'type': "union",
             'subject': self.subject,
             'clauses': [c.to_dict() for c in self.atom_clauses]
         }
+        if version and version == "v1.0.0":
+            del out['type']
         return out
 
-    def from_dict(self, subject: Variable | Identifier, data: dict):
+    def from_dict(self, subject: Variable | Identifier, data: dict, protocol: str = None):
         self.subject = subject
         for atom_dict in data.get('clauses', []):
             atom = AtomClause()
@@ -372,7 +377,7 @@ class SelectQuery(object):
     def to_sparql(self) -> str:
         pass
 
-    def to_dict(self) -> dict:
+    def to_dict(self, version: str = None) -> dict:
         pass
 
 
@@ -522,7 +527,7 @@ class UnarySelectQuery(SelectQuery):
 
         return strio.getvalue()
 
-    def to_dict(self) -> dict:
+    def to_dict(self, version=None) -> dict:
         out = {
             'subject': self.subject,
         }
@@ -530,7 +535,7 @@ class UnarySelectQuery(SelectQuery):
         kinds = self.get_kinds()
         if len(kinds) > 0:
             out["kinds"] = kinds
-        out["clauses"] = [c.to_dict() for c in self.property_clauses()]
+        out["clauses"] = [c.to_dict(version) for c in self.property_clauses()]
         out['graph'] = self.graph
         out['limit'] = self.limit
         out['lang'] = self.lang

@@ -23,16 +23,20 @@ class KnowledgeBase(object):
     def __init__(self,
                  route: str,
                  ontology: Ontology = None,
-                 dataset: str = None):
+                 dataset: str = None,
+                 version: str = None):
         """
 
         :param route: the service's endpoint route
+        :param ontology: the kb ontology
         :param dataset: the dataset name; if None, uses the service's default
+        :param version: the service's version identifier
         """
         assert route
         self.route = route
         self.dataset = dataset
         self.ontology = ontology
+        self.version = version
 
     def fetch_entity(self,
                      _id: str,
@@ -86,7 +90,7 @@ class KnowledgeBase(object):
 
         res = requests.post(
             url=self.route,
-            json=query.to_dict(),
+            json=query.to_dict(self.version),
             headers={"Accept": "application/json"},
             timeout=30
         )
@@ -138,7 +142,7 @@ class KnowledgeBase(object):
 
         res = requests.post(
             url=self.route,
-            json=query.to_dict(),
+            json=query.to_dict(self.version),
             headers={"Accept": "application/json"},
             timeout=30
         )
@@ -154,7 +158,7 @@ class KnowledgeBase(object):
 
         res = requests.post(
             url=self.route,
-            json=query.to_dict(),
+            json=query.to_dict(self.version),
             headers={"Accept": "application/json"},
             timeout=30
         )
