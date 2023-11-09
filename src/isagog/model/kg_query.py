@@ -102,13 +102,13 @@ class Clause(object):
     def to_sparql(self) -> str:
         pass
 
-    def to_dict(self, version: str = None) -> dict:
+    def to_dict(self, version: str = "latest") -> dict:
         pass
 
     def is_defined(self) -> bool:
         return self.subject is not None
 
-    def from_dict(self, subject: Variable | Identifier, data: dict, protocol: str = None):
+    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
         pass
 
 
@@ -204,9 +204,8 @@ class AtomClause(Clause):
 
         return clause
 
-    def to_dict(self, version: str = None) -> dict:
+    def to_dict(self, version: str = "latest") -> dict:
         out = {
-            'type': "atomic",
             'property': self.predicate,
             'method': self.method.value,
             'project': self.project,
@@ -219,12 +218,15 @@ class AtomClause(Clause):
         else:
             out['identifier'] = self.argument
 
-        if version and version == "v1.0.0":
-            del out['type']
+        match version:
+            case 'latest':
+                out['type'] = "atomic",
+            case "v1.0.0":
+                pass
 
         return out
 
-    def from_dict(self, subject: Variable | Identifier, data: dict, protocol: str = None):
+    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
         """
         Openapi spec:  components.schemas.Clause
         """
@@ -300,17 +302,21 @@ class UnionClause(Clause):
                 strio.write("\t}\n")
                 return strio.getvalue()
 
-    def to_dict(self, version: str = None) -> dict:
+    def to_dict(self, version: str = "latest") -> dict:
         out = {
-            'type': "union",
             'subject': self.subject,
             'clauses': [c.to_dict() for c in self.atom_clauses]
         }
-        if version and version == "v1.0.0":
-            del out['type']
+
+        match version:
+            case "latest":
+                out['type'] = "union"
+            case "v1.0.0":
+                pass
+
         return out
 
-    def from_dict(self, subject: Variable | Identifier, data: dict, protocol: str = None):
+    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
         self.subject = subject
         for atom_dict in data.get('clauses', []):
             atom = AtomClause()
@@ -527,7 +533,7 @@ class UnarySelectQuery(SelectQuery):
 
         return strio.getvalue()
 
-    def to_dict(self, version=None) -> dict:
+    def to_dict(self, version="latest") -> dict:
         out = {
             'subject': self.subject,
         }

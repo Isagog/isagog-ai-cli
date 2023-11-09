@@ -3,12 +3,12 @@ Interface to Isagog KG service
 """
 
 import logging
-from typing import Type, TypeVar
+from typing import Type, TypeVar, Any
 
 import requests
 
-from isagog.model.kg_query import UnarySelectQuery, UnionClause, AtomClause, Comparison
-from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute
+from isagog.model.kg_query import UnarySelectQuery, UnionClause, AtomClause, Comparison, Value
+from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation
 
 log = logging.getLogger("isagog-cli")
 
@@ -24,7 +24,7 @@ class KnowledgeBase(object):
                  route: str,
                  ontology: Ontology = None,
                  dataset: str = None,
-                 version: str = None):
+                 version: str = "latest"):
         """
 
         :param route: the service's endpoint route
@@ -71,19 +71,19 @@ class KnowledgeBase(object):
             return None
 
     def query_assertions(self,
-                         subject_id: str,
-                         properties: list[str]
+                         subject: Individual,
+                         properties: list[Attribute | Relation]
                          ) -> list[Assertion]:
         """
         Returns entity properties
 
-        :param subject_id:
+        :param subject:
         :param properties: the queried properties
         :return: a list of dictionaries { property: values }
         """
-        assert (subject_id and properties)
+        assert (subject and properties)
 
-        query = UnarySelectQuery(subject=subject_id)
+        query = UnarySelectQuery(subject=subject)
 
         for prop in properties:
             query.add_fetch_clause(predicate=str(prop))
@@ -112,12 +112,12 @@ class KnowledgeBase(object):
 
                 return [Assertion(predicate=prop, values=__get_values(f"<{prop}>")) for prop in properties]
         else:
-            log.warning("Query of entity %s failed due to %s", subject_id, res.reason)
+            log.warning("Query of entity %s failed due to %s", subject, res.reason)
             return []
 
     def search_individuals(self,
-                           kinds: list[str] = None,
-                           search_values: dict[Attribute, str] = None,
+                           kinds: list[Concept] = None,
+                           search_values: dict[Attribute, Value] = None,
                            ) -> list[Individual]:
         """
         Retrieves individuals by string search

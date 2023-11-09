@@ -334,19 +334,17 @@ class Individual(Entity):
         self.score = float(kwargs.get('score', 0.0))
 
     def get_attribute(self, attribute_id: str) -> AttributeInstance | Any:
-        found = next(filter(lambda x: x.id.strip('<>') == attribute_id, self.attributes), None)
+        found = next(filter(lambda x: x.predicate == attribute_id, self.attributes), None)
         if found and not found.is_empty():
             return found
         else:
-            log.warning("%s not valued in %s", attribute_id, self.id)
             return VOID_ATTRIBUTE
 
     def get_relation(self, relation_id: str) -> RelationInstance | Any:
-        found = next(filter(lambda x: x.id.strip('<>') == relation_id, self.relations), None)
+        found = next(filter(lambda x: x.predicate == relation_id, self.relations), None)
         if found and not found.is_empty():
             return found
         else:
-            log.warning("%s not valued %s", relation_id, self.id)
             return VOID_RELATION
 
     def set_score(self, score: float):
