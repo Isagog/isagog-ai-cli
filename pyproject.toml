@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "isagog-ai"
-version = "0.2.1"
+version = "0.2.3"
 description = ""
 authors = ["Guido Vetere <g.vetere@isagog.com>"]
 readme = "README.md"
@@ -21,5 +21,3 @@ pytest = "^7.4.3"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-

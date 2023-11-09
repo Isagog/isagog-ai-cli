@@ -55,21 +55,16 @@ class Identified:
 
     def __init__(self, _id: ID):
         assert _id
-        self.id = URIRef(_id) if isinstance(_id, str) else _id
+        self.id = str(_id).strip("<>") if isinstance(_id, URIRef) else _id
 
-    def n3(
-            self, namespace_manager: Optional["NamespaceManager"] = None
-    ) -> str:
+    def n3(self) -> str:
         """Convert to n3"""
-        return self.id.n3(namespace_manager=namespace_manager)
-
-    def __str__(self):
-        return str(self.id)
+        return f"<{self.id}>"
 
     def __eq__(self, other):
         return (
                 (isinstance(other, Identified) and self.id == other.id)
-                or (isinstance(other, URIRef) and self.id == other)
+                or (isinstance(other, URIRef) and self.id == str(other).strip("<>"))
                 or (isinstance(other, str) and str(self.id) == other)
         )
 
@@ -357,4 +352,3 @@ class Individual(Entity):
 
     def has_score(self) -> bool:
         return self.score is not None
-
