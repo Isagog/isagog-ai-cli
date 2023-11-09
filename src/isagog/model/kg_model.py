@@ -221,7 +221,7 @@ class Ontology(Graph):
 
     def subclasses(self, sup: Concept) -> list[Concept]:
         """
-        Gets direct subclasses of a given concept.
+        Gets direct subclasses of a given concept
         """
         if sup not in self._submap:
             self._submap[sup] = [
