@@ -102,13 +102,13 @@ class Clause(object):
     def to_sparql(self) -> str:
         pass
 
-    def to_dict(self) -> dict:
+    def to_dict(self, version: str = "latest") -> dict:
         pass
 
     def is_defined(self) -> bool:
         return self.subject is not None
 
-    def from_dict(self, subject: Variable | Identifier, data: dict):
+    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
         pass
 
 
@@ -126,7 +126,7 @@ class AtomClause(Clause):
             arg = str(arg)
             if arg.startswith('?'):
                 return Variable(arg)
-            elif arg.startswith('<') or ':' in arg[0, 10]:
+            elif arg.startswith('<') or ':' in arg[:8]:
                 return Identifier(arg)
             else:
                 return Value(arg)
@@ -204,9 +204,8 @@ class AtomClause(Clause):
 
         return clause
 
-    def to_dict(self) -> dict:
+    def to_dict(self, version: str = "latest") -> dict:
         out = {
-            'type': "atomic",
             'property': self.predicate,
             'method': self.method.value,
             'project': self.project,
@@ -219,9 +218,15 @@ class AtomClause(Clause):
         else:
             out['identifier'] = self.argument
 
+        match version:
+            case 'latest':
+                out['type'] = "atomic",
+            case "v1.0.0":
+                pass
+
         return out
 
-    def from_dict(self, subject: Variable | Identifier, data: dict):
+    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
         """
         Openapi spec:  components.schemas.Clause
         """
@@ -297,15 +302,21 @@ class UnionClause(Clause):
                 strio.write("\t}\n")
                 return strio.getvalue()
 
-    def to_dict(self) -> dict:
+    def to_dict(self, version: str = "latest") -> dict:
         out = {
-            'type': "union",
             'subject': self.subject,
             'clauses': [c.to_dict() for c in self.atom_clauses]
         }
+
+        match version:
+            case "latest":
+                out['type'] = "union"
+            case "v1.0.0":
+                pass
+
         return out
 
-    def from_dict(self, subject: Variable | Identifier, data: dict):
+    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
         self.subject = subject
         for atom_dict in data.get('clauses', []):
             atom = AtomClause()
@@ -372,7 +383,7 @@ class SelectQuery(object):
     def to_sparql(self) -> str:
         pass
 
-    def to_dict(self) -> dict:
+    def to_dict(self, version: str = None) -> dict:
         pass
 
 
@@ -522,7 +533,7 @@ class UnarySelectQuery(SelectQuery):
 
         return strio.getvalue()
 
-    def to_dict(self) -> dict:
+    def to_dict(self, version="latest") -> dict:
         out = {
             'subject': self.subject,
         }
@@ -530,7 +541,7 @@ class UnarySelectQuery(SelectQuery):
         kinds = self.get_kinds()
         if len(kinds) > 0:
             out["kinds"] = kinds
-        out["clauses"] = [c.to_dict() for c in self.property_clauses()]
+        out["clauses"] = [c.to_dict(version) for c in self.property_clauses()]
         out['graph'] = self.graph
         out['limit'] = self.limit
         out['lang'] = self.lang

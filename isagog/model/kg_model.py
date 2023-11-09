@@ -84,15 +84,17 @@ class Annotation(Identified):
         Identified.__init__(self, _id)
 
 
+ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.Class]
+
+
 class Entity(Identified):
     """
     Any identified knowledge entity, either predicative or individual
     """
-    ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.Class]
 
     def __init__(self, _id: ID, _type: str = None, **kwargs):
         super().__init__(_id)
-        assert (_type and _type in Entity.ALLOWED_TYPES)
+        assert (_type and _type in ALLOWED_TYPES)
         self.type = _type
 
     def to_dict(self) -> dict:
@@ -219,7 +221,7 @@ class Ontology(Graph):
 
     def subclasses(self, sup: Concept) -> list[Concept]:
         """
-        Gets direct subclasses of a given concept.
+        Gets direct subclasses of a given concept
         """
         if sup not in self._submap:
             self._submap[sup] = [
@@ -326,24 +328,23 @@ class Individual(Entity):
         self.label = kwargs.get('label', _uri_label(self.id))
         self.kinds = kwargs.get('kinds', [OWL.Thing])
         self.comment = kwargs.get('comment', '')
-        self.attributes = [AttributeInstance(**a_data) for a_data in kwargs.get('attributes', list[AttributeInstance]())]
+        self.attributes = [AttributeInstance(**a_data) for a_data in
+                           kwargs.get('attributes', list[AttributeInstance]())]
         self.relations = [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())]
         self.score = float(kwargs.get('score', 0.0))
 
     def get_attribute(self, attribute_id: str) -> AttributeInstance | Any:
-        found = next(filter(lambda x: x.id.strip('<>') == attribute_id, self.attributes), None)
+        found = next(filter(lambda x: x.predicate == attribute_id, self.attributes), None)
         if found and not found.is_empty():
             return found
         else:
-            log.warning("%s not valued in %s", attribute_id, self.id)
             return VOID_ATTRIBUTE
 
     def get_relation(self, relation_id: str) -> RelationInstance | Any:
-        found = next(filter(lambda x: x.id.strip('<>') == relation_id, self.relations), None)
+        found = next(filter(lambda x: x.predicate == relation_id, self.relations), None)
         if found and not found.is_empty():
             return found
         else:
-            log.warning("%s not valued %s", relation_id, self.id)
             return VOID_RELATION
 
     def set_score(self, score: float):
@@ -354,3 +355,4 @@ class Individual(Entity):
 
     def has_score(self) -> bool:
         return self.score is not None
+

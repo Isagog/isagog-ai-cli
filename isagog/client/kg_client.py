@@ -3,12 +3,12 @@ Interface to Isagog KG service
 """
 
 import logging
-from typing import Type, TypeVar
+from typing import Type, TypeVar, Any
 
 import requests
 
-from isagog.model.kg_query import UnarySelectQuery, UnionClause, AtomClause, Comparison
-from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute
+from isagog.model.kg_query import UnarySelectQuery, UnionClause, AtomClause, Comparison, Value
+from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation
 
 log = logging.getLogger("isagog-cli")
 
@@ -23,16 +23,20 @@ class KnowledgeBase(object):
     def __init__(self,
                  route: str,
                  ontology: Ontology = None,
-                 dataset: str = None):
+                 dataset: str = None,
+                 version: str = "latest"):
         """
 
         :param route: the service's endpoint route
+        :param ontology: the kb ontology
         :param dataset: the dataset name; if None, uses the service's default
+        :param version: the service's version identifier
         """
         assert route
         self.route = route
         self.dataset = dataset
         self.ontology = ontology
+        self.version = version
 
     def fetch_entity(self,
                      _id: str,
@@ -61,32 +65,32 @@ class KnowledgeBase(object):
         )
         if res.ok:
             log.debug("Fetched %s", _id)
-            return entity_type(res.json())
+            return entity_type(_id, **res.json())
         else:
             log.error("Couldn't fetch %s due to %s", _id, res.reason)
             return None
 
     def query_assertions(self,
-                         subject_id: str,
-                         properties: list[str]
+                         subject: Individual,
+                         properties: list[Attribute | Relation]
                          ) -> list[Assertion]:
         """
         Returns entity properties, if any
 
-        :param subject_id:
+        :param subject:
         :param properties: the queried properties
         :return: a list of dictionaries { property: values }
         """
-        assert (subject_id and properties)
+        assert (subject and properties)
 
-        query = UnarySelectQuery(subject=subject_id)
+        query = UnarySelectQuery(subject=subject)
 
         for prop in properties:
             query.add_fetch_clause(predicate=str(prop))
 
         res = requests.post(
             url=self.route,
-            json=query.to_dict(),
+            json=query.to_dict(self.version),
             headers={"Accept": "application/json"},
             timeout=30
         )
@@ -108,12 +112,12 @@ class KnowledgeBase(object):
 
                 return [Assertion(predicate=prop, values=__get_values(f"<{prop}>")) for prop in properties]
         else:
-            log.warning("Query of entity %s failed due to %s", subject_id, res.reason)
+            log.warning("Query of entity %s failed due to %s", subject, res.reason)
             return []
 
     def search_individuals(self,
-                           kinds: list[str] = None,
-                           search_values: dict[Attribute, str] = None,
+                           kinds: list[Concept] = None,
+                           search_values: dict[Attribute, Value] = None,
                            ) -> list[Individual]:
         """
         Retrieves individuals by string search
@@ -138,7 +142,7 @@ class KnowledgeBase(object):
 
         res = requests.post(
             url=self.route,
-            json=query.to_dict(),
+            json=query.to_dict(self.version),
             headers={"Accept": "application/json"},
             timeout=30
         )
@@ -154,7 +158,7 @@ class KnowledgeBase(object):
 
         res = requests.post(
             url=self.route,
-            json=query.to_dict(),
+            json=query.to_dict(self.version),
             headers={"Accept": "application/json"},
             timeout=30
         )
