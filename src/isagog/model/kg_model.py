@@ -87,10 +87,9 @@ class Entity(Identified):
     Any identified knowledge entity, either predicative or individual
     """
 
-    def __init__(self, _id: ID, _type: str = None, **kwargs):
+    def __init__(self, _id: ID, **kwargs):
         super().__init__(_id)
-        assert (_type and _type in ALLOWED_TYPES)
-        self.type = _type
+        self.__owl__ = None
 
     def to_dict(self) -> dict:
         return _todict(self)
@@ -103,7 +102,8 @@ class Concept(Entity):
     """
 
     def __init__(self, _id: ID, **kwargs):
-        super().__init__(_id, _type=OWL.Class, **kwargs)
+        super().__init__(_id, **kwargs)
+        self.__owl__ = OWL.Class
         self.comment = kwargs.get('comment', "")
         self.ontology = kwargs.get('ontology', "")
         self.parents = kwargs.get('parents', [OWL.Thing])
@@ -115,7 +115,8 @@ class Attribute(Entity):
     """
 
     def __init__(self, _id: ID, domain: Optional[Concept] = None):
-        super().__init__(_id, _type=OWL.DatatypeProperty)
+        super().__init__(_id)
+        self.__owl__ = OWL.DatatypeProperty
         self.domain = domain if domain else Concept(OWL.Thing)
 
 
@@ -132,7 +133,7 @@ class Relation(Entity):
             domain: Optional[Concept] = None,
             range: Optional[Concept] = None,
     ):
-        super().__init__(self, _id)
+        super().__init__(_id)
         self.inverse = inverse
         self.domain = domain if domain is not None else Concept(OWL.Thing)
         self.range = range if range is not None else Concept(OWL.Thing)
@@ -319,7 +320,8 @@ class Individual(Entity):
     """
 
     def __init__(self, _id: ID, **kwargs):
-        super().__init__(_id, _type=OWL.NamedIndividual, **kwargs)
+        super().__init__(_id, **kwargs)
+        self.__owl__ = OWL.NamedIndividual
         self.label = kwargs.get('label', _uri_label(self.id))
         self.kinds = kwargs.get('kinds', [OWL.Thing])
         self.comment = kwargs.get('comment', '')
