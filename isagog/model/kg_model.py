@@ -35,6 +35,8 @@ def _todict(obj, classkey=None):
         data = dict([(key, _todict(value, classkey))
                      for key, value in obj.__dict__.items()
                      if not callable(value) and not key.startswith('_')])
+        if not data:
+            return str(obj)
         if classkey is not None and hasattr(obj, "__class__"):
             data[classkey] = obj.__class__.__name__
         return data
