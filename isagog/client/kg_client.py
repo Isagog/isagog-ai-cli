@@ -17,7 +17,7 @@ E = TypeVar('E', bound='Entity')
 
 class KnowledgeBase(object):
     """
-    A KG proxy
+    Interface to knowledge base service
     """
 
     def __init__(self,
