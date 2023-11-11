@@ -154,7 +154,10 @@ class KnowledgeBase(object):
 
         return entities
 
-    def query_individual(self, query: UnarySelectQuery) -> list[Individual]:
+    def query_individual(self,
+                         query: UnarySelectQuery,
+                         kind: Type[E] = Individual
+                         ) -> list[E]:
 
         res = requests.post(
             url=self.route,
@@ -164,7 +167,7 @@ class KnowledgeBase(object):
         )
 
         if res.ok:
-            return [Individual(r.get('id'), **r) for r in res.json()]
+            return [kind(r.get('id'), **r) for r in res.json()]
         else:
             log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
             return []
