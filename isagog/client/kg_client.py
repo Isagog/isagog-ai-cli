@@ -156,12 +156,17 @@ class KnowledgeBase(object):
 
     def query_individual(self,
                          query: UnarySelectQuery,
-                         kind: Type[E] = Individual
+                         kind: Type[E] = Individual,
                          ) -> list[E]:
+
+        req = query.to_dict(self.version)
+
+        if self.dataset and self.version > "v1.0.0":
+            req['dataset'] = self.dataset
 
         res = requests.post(
             url=self.route,
-            json=query.to_dict(self.version),
+            json=req,
             headers={"Accept": "application/json"},
             timeout=30
         )
