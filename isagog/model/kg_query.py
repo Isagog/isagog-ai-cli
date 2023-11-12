@@ -534,9 +534,10 @@ class UnarySelectQuery(SelectQuery):
         return strio.getvalue()
 
     def to_dict(self, version="latest") -> dict:
-        out = {
-            'subject': self.subject,
-        }
+
+        out = {}
+        if version == "latest" or version > "v1.0.0":
+            out['subject'] = self.subject
 
         kinds = self.get_kinds()
         if len(kinds) > 0:
