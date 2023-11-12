@@ -158,7 +158,7 @@ class Assertion(object):
         :param values:
         """
         assert predicate
-        self.predicate = predicate
+        self.predicate = predicate.strip("<>")
         self.subject = subject if subject else None
         self.values = values if values else []
 

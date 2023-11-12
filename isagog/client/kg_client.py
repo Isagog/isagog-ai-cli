@@ -161,7 +161,7 @@ class KnowledgeBase(object):
 
         req = query.to_dict(self.version)
 
-        if self.dataset and self.version > "v1.0.0":
+        if self.dataset and (self.version == "latest" or self.version > "v1.0.0"):
             req['dataset'] = self.dataset
 
         res = requests.post(
