@@ -187,11 +187,11 @@ class AtomClause(Clause):
             case Comparison.KEYWORD:
                 clause += f'({self.subject} ?score) text:query "{self.argument}"'
             case Comparison.GREATER:
-                var = self.variable if self.variable else Variable()  # self._temp_var()
+                var = self.variable if self.variable else Variable()
                 clause += f"{self.subject} {self.predicate.n3()} {var}\n"
                 clause += f'\t\tFILTER ({var} > "{self.argument}")'
             case Comparison.LESSER:
-                var = Variable()  # self._temp_var()
+                var = self.variable if self.variable else Variable()
                 clause += f'{self.subject} {self.predicate.n3()} {var}\n'
                 clause += f'FILTER ({var} < "{self.argument}")'
             case _:
