@@ -259,7 +259,7 @@ class AttributeInstance(Assertion):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(predicate=kwargs.get('predicate', KeyError("missing attribute predicate")),
+        super().__init__(predicate=kwargs.get('predicate', kwargs.get('is', KeyError("missing attribute predicate"))),
                          values=kwargs.get('values', []))
         self.value_type = kwargs.get('type', "string")
 
@@ -285,7 +285,7 @@ class AttributeInstance(Assertion):
         return len(self.values) == 0 or self.values[0] == "None"
 
 
-VOID_ATTRIBUTE = AttributeInstance(predicate='http://isagog.com/attribute#void')
+VOID_ATTRIBUTE = AttributeInstance(id='http://isagog.com/attribute#void')
 
 
 class RelationInstance(Assertion):
@@ -295,7 +295,7 @@ class RelationInstance(Assertion):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(predicate=kwargs.get('predicate', KeyError("missing relation predicate")),
+        super().__init__(predicate=kwargs.get('predicate', kwargs.get('id', KeyError("missing relation predicate"))),
                          values=[Individual(_id=r_data.get('id'), **r_data) for r_data in kwargs.get('values', [])])
 
     def all_values(self) -> list:
