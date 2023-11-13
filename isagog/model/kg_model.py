@@ -259,7 +259,7 @@ class AttributeInstance(Assertion):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(predicate=kwargs.get('predicate', kwargs.get('is', KeyError("missing attribute predicate"))),
+        super().__init__(predicate=kwargs.get('predicate', kwargs.get('id', KeyError("missing attribute predicate"))),
                          values=kwargs.get('values', []))
         self.value_type = kwargs.get('type', "string")
 
