@@ -298,12 +298,18 @@ class RelationInstance(Assertion):
         super().__init__(predicate=kwargs.get('predicate', kwargs.get('id', KeyError("missing relation predicate"))),
                          values=[Individual(_id=r_data.get('id'), **r_data) for r_data in kwargs.get('values', [])])
 
-    def all_values(self) -> list:
-        return self.values
+    def all_values(self, only_id=True) -> list:
+        if only_id:
+            return [ind.id() for ind in self.values]
+        else:
+            return self.values
 
-    def first_value(self, default=None) -> Any | None:
+    def first_value(self, only_id=True, default=None) -> Any | None:
         if len(self.values) > 0:
-            return self.values[0]
+            if only_id:
+                return self.values[0].id()
+            else:
+                return self.values[0]
         else:
             return default
 
