@@ -285,7 +285,7 @@ class AttributeInstance(Assertion):
         return len(self.values) == 0 or self.values[0] == "None"
 
 
-VOID_ATTRIBUTE = AttributeInstance(id='http://isagog.com/attribute#void')
+VOID_ATTRIBUTE = AttributeInstance(predicate='http://isagog.com/attribute#void')
 
 
 class RelationInstance(Assertion):
@@ -311,7 +311,7 @@ class RelationInstance(Assertion):
         return len(self.values) == 0
 
 
-VOID_RELATION = RelationInstance(id='http://isagog.com/relation#void')
+VOID_RELATION = RelationInstance(predicate='http://isagog.com/relation#void')
 
 
 class Individual(Entity):
