@@ -259,7 +259,7 @@ class AttributeInstance(Assertion):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(predicate=kwargs.get('id', KeyError("missing attribute id")),
+        super().__init__(predicate=kwargs.get('predicate', KeyError("missing attribute predicate")),
                          values=kwargs.get('values', []))
         self.value_type = kwargs.get('type', "string")
 
@@ -295,7 +295,7 @@ class RelationInstance(Assertion):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(predicate=kwargs.get('id', KeyError("missing relation id")),
+        super().__init__(predicate=kwargs.get('predicate', KeyError("missing relation predicate")),
                          values=[Individual(_id=r_data.get('id'), **r_data) for r_data in kwargs.get('values', [])])
 
     def all_values(self) -> list:
