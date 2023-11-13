@@ -300,14 +300,14 @@ class RelationInstance(Assertion):
 
     def all_values(self, only_id=True) -> list:
         if only_id:
-            return [ind.id() for ind in self.values]
+            return [ind.id for ind in self.values]
         else:
             return self.values
 
     def first_value(self, only_id=True, default=None) -> Any | None:
         if len(self.values) > 0:
             if only_id:
-                return self.values[0].id()
+                return self.values[0].id
             else:
                 return self.values[0]
         else:
