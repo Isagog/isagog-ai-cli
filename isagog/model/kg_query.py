@@ -231,6 +231,9 @@ class AtomClause(Clause):
             'project': self.project,
             'optional': self.optional
         }
+        if self.subject:
+            out['subject'] = self.subject
+
         if isinstance(self.argument, Value):
             out['value'] = self.argument
         elif isinstance(self.argument, Variable):
@@ -240,7 +243,7 @@ class AtomClause(Clause):
 
         match version:
             case 'latest':
-                out['type'] = "atomic",
+                out['type'] = "atomic"
             case "v1.0.0":
                 pass
 
