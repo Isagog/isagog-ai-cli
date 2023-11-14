@@ -226,10 +226,12 @@ class AtomClause(Clause):
 
         return out
 
-    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
+    def from_dict(self, subject: Variable | Identifier | str, data: dict, version: str = "latest"):
         """
         Openapi spec:  components.schemas.Clause
         """
+        if subject and isinstance(subject,str):
+            subject = Identifier(subject)
 
         self.subject = subject
         for key, val in data.items():
@@ -244,9 +246,16 @@ class AtomClause(Clause):
                 case 'identifier':
                     self.argument = Identifier(val)
                 case 'subject':
-                    self.argument = Identifier(val)
+                    # the subject should be already in plase
+                    if self.subject:
+                        pass
+                    else:
+                        self.subject = Identifier(val)
                 case 'variable':
-                    self.variable = Variable(val)
+                    if val == "query.subject":
+                        self.variable = Variable("i")  # the query subject
+                    else:
+                        self.variable = Variable(val)
                     if not self.argument:
                         self.argument = self.variable
                 case 'method':
