@@ -16,32 +16,31 @@ class Identifier(URIRef):
     """
 
     @staticmethod
-    def is_valid_uri(uri_string):
+    def is_valid_id(id_string):
         try:
-            # Try to create a URIRef object from the string
-            URIRef(uri_string)
+            if id_string.startswith('?'):
+                return False
+            URIRef(id_string)
             return True
         except Exception:
-            # If an exception is raised, the string is not a valid URI
             return False
 
     def __new__(cls, value: str | URIRef):
         return super().__new__(cls, value)
-
-    # def __str__(self):
-    #     return f"<{super().__str__()}>"
-
-    # def __eq__(self, other):
-    #     if isinstance(other, URIRef):
-    #         return
-    #     else:
-    #         return str(self) == str(other)
 
 
 class Variable(str):
     """
     Can be an uri or a variable name
     """
+
+    @staticmethod
+    def is_valid_variable(var_string):
+        try:
+            Variable(var_string)
+            return True
+        except ValueError:
+            return False
 
     def __new__(cls, value=None):
 
@@ -64,16 +63,6 @@ class Variable(str):
             return super().__new__(cls, "?" + value)
         else:
             raise ValueError(f"Bad variable name {value}")
-
-    @staticmethod
-    def is_valid_variable(var_string):
-        try:
-            # Try to create a URIRef object from the string
-            Variable(var_string)
-            return True
-        except ValueError:
-            # If an exception is raised, the string is not a valid URI
-            return False
 
 
 class Value(str):
@@ -254,7 +243,7 @@ class AtomClause(Clause):
         Openapi spec:  components.schemas.Clause
         """
         if subject and not (isinstance(subject, Variable) or isinstance(subject, Identifier)):
-            if Identifier.is_valid_uri(str(subject)):
+            if Identifier.is_valid_id(str(subject)):
                 subject = Identifier(str(subject))
             elif Variable.is_valid_variable(str(subject)):
                 subject = Variable(str(subject))
