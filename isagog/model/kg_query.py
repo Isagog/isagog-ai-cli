@@ -15,6 +15,16 @@ class Identifier(URIRef):
 
     """
 
+    @staticmethod
+    def is_valid_uri(uri_string):
+        try:
+            # Try to create a URIRef object from the string
+            URIRef(uri_string)
+            return True
+        except Exception:
+            # If an exception is raised, the string is not a valid URI
+            return False
+
     def __new__(cls, value: str | URIRef):
         return super().__new__(cls, value)
 
@@ -54,6 +64,16 @@ class Variable(str):
             return super().__new__(cls, "?" + value)
         else:
             raise ValueError(f"Bad variable name {value}")
+
+    @staticmethod
+    def is_valid_variable(var_string):
+        try:
+            # Try to create a URIRef object from the string
+            Variable(var_string)
+            return True
+        except ValueError:
+            # If an exception is raised, the string is not a valid URI
+            return False
 
 
 class Value(str):
@@ -226,12 +246,17 @@ class AtomClause(Clause):
 
         return out
 
-    def from_dict(self, subject: Variable | Identifier | str, data: dict, version: str = "latest"):
+    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
         """
         Openapi spec:  components.schemas.Clause
         """
-        if subject and isinstance(subject,str):
-            subject = Identifier(subject)
+        if subject and not (isinstance(subject, Variable) or isinstance(subject, Identifier)):
+            if Identifier.is_valid_uri(str(subject)):
+                subject = Identifier(str(subject))
+            elif Variable.is_valid_variable(str(subject)):
+                subject = Variable(str(subject))
+            else:
+                raise ValueError(f"Invalid subject {subject}")
 
         self.subject = subject
         for key, val in data.items():
