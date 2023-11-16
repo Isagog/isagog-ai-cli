@@ -224,17 +224,15 @@ class AtomClause(Clause):
         if self.subject:
             out['subject'] = self.subject
         if self.argument:
-            out['argument'] = self.argument
+            if isinstance(self.argument, Value):
+                out['value'] = self.argument
+            elif isinstance(self.argument, Variable):
+                out['variable'] = self.argument
+            else:
+                out['identifier'] = self.argument
         if self.variable:
             out['variable'] = self.variable
 
-        # if isinstance(self.argument, Value):
-        #     out['value'] = self.argument
-        # elif isinstance(self.argument, Variable):
-        #     out['variable'] = self.argument
-        # else:
-        #     out['identifier'] = self.argument
-       # out = self.__dict__
         match version:
             case 'latest':
                 out['type'] = "atomic"
@@ -256,17 +254,6 @@ class AtomClause(Clause):
                 raise ValueError(f"Invalid subject {subject}")
 
         self.subject = subject
-
-        """
-                 
-       property 
-       argument 
-       variable 
-       method = 
-       project =
-       optional 
-
-        """
 
         for key, val in data.items():
             match key:
