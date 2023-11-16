@@ -144,7 +144,7 @@ class Relation(Entity):
 
 class Assertion(object):
     """
-    Logical assertion of the form: predicate(subject, values)
+    Logical assertion of the form: property(subject, values)
     """
 
     def __init__(self,
@@ -259,7 +259,7 @@ class AttributeInstance(Assertion):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(predicate=kwargs.get('predicate', kwargs.get('id', KeyError("missing attribute predicate"))),
+        super().__init__(predicate=kwargs.get('property', kwargs.get('id', KeyError("missing attribute property"))),
                          values=kwargs.get('values', []))
         self.value_type = kwargs.get('type', "string")
 
@@ -295,7 +295,7 @@ class RelationInstance(Assertion):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(predicate=kwargs.get('predicate', kwargs.get('id', KeyError("missing relation predicate"))),
+        super().__init__(predicate=kwargs.get('property', kwargs.get('id', KeyError("missing relation property"))),
                          values=[Individual(_id=r_data.get('id'), **r_data) for r_data in kwargs.get('values', [])])
 
     def all_values(self, only_id=True) -> list:
@@ -339,14 +339,14 @@ class Individual(Entity):
         self.score = float(kwargs.get('score', 0.0))
 
     def get_attribute(self, attribute_id: str) -> AttributeInstance | Any:
-        found = next(filter(lambda x: x.predicate == attribute_id, self.attributes), None)
+        found = next(filter(lambda x: x.property == attribute_id, self.attributes), None)
         if found and not found.is_empty():
             return found
         else:
             return VOID_ATTRIBUTE
 
     def get_relation(self, relation_id: str) -> RelationInstance | Any:
-        found = next(filter(lambda x: x.predicate == relation_id, self.relations), None)
+        found = next(filter(lambda x: x.property == relation_id, self.relations), None)
         if found and not found.is_empty():
             return found
         else:

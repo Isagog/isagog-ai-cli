@@ -132,11 +132,11 @@ class KnowledgeBase(object):
             query.add_kinds(kinds)
         if len(search_values) == 1:
             attribute, value = next(iter(search_values.items()))
-            search_clause = AtomClause(predicate=attribute, argument=value, method=Comparison.REGEX)
+            search_clause = AtomClause(property=attribute, argument=value, method=Comparison.REGEX)
         else:
             search_clause = UnionClause()
             for attribute, value in search_values.items():
-                search_clause.add_clause(predicate=attribute, argument=value, method=Comparison.REGEX)
+                search_clause.add_clause(property=attribute, argument=value, method=Comparison.REGEX)
 
         query.add(search_clause)
 
