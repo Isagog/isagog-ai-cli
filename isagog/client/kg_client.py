@@ -40,7 +40,7 @@ class KnowledgeBase(object):
 
     def fetch_entity(self,
                      _id: str,
-                     expand = False,
+                     expand = True,
                      entity_type: Type[E] = Entity
                      ) -> E | None:
         """
