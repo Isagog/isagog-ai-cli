@@ -60,7 +60,7 @@ class KnowledgeBase(object):
 
         expand = "true" if expand else "false"
 
-        preview = "true" if (preview and not expand) else "false"
+        preview = "true" if (preview and expand == "false") else "false"
 
         params = f"id={_id}&expand={expand}&preview={preview}"
 
