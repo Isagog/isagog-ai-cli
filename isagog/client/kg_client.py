@@ -40,6 +40,7 @@ class KnowledgeBase(object):
 
     def fetch_entity(self,
                      _id: str,
+                     expand = False,
                      entity_type: Type[E] = Entity
                      ) -> E | None:
         """
@@ -54,7 +55,9 @@ class KnowledgeBase(object):
         if not issubclass(entity_type, Entity):
             raise ValueError(f"{entity_type} not an Entity")
 
-        params = f"id={_id}&expand=true"
+        expand = "true" if expand else "false"
+
+        params = f"id={_id}&expand={expand}"
         if self.dataset:
             params += f"&dataset={self.dataset}"
 
