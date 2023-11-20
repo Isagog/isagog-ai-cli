@@ -40,13 +40,16 @@ class KnowledgeBase(object):
 
     def fetch_entity(self,
                      _id: str,
-                     expand = True,
+                     expand: bool = False,
+                     preview: bool = False,
                      entity_type: Type[E] = Entity
                      ) -> E | None:
         """
         Gets all individual entity data from the kg
 
         :param _id: the entity identifier
+        :param preview:
+        :param expand:
         :param entity_type: the entity type (default: Entity)
         """
 
@@ -57,7 +60,10 @@ class KnowledgeBase(object):
 
         expand = "true" if expand else "false"
 
-        params = f"id={_id}&expand={expand}"
+        preview = not expand and "true" if preview else "false"
+
+        params = f"id={_id}&expand={expand}&preview={preview}"
+
         if self.dataset:
             params += f"&dataset={self.dataset}"
 
