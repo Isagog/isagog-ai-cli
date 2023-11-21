@@ -1,14 +1,13 @@
 """
 KG Query module
 """
+import logging
 import random
 import re
 from enum import Enum
 from io import StringIO
 
 from rdflib import RDF, RDFS, OWL, URIRef
-
-from isagog.client.kg_client import log
 
 
 class Identifier(URIRef):
@@ -334,18 +333,18 @@ class UnionClause(Clause):
         if len(self.atom_clauses) > 1:
             strio.write("\t{\n")
 
-            strio.write("\t{\n")
-            strio.write("\t\t" + self.atom_clauses[0].to_sparql())
-            strio.write("\t}\n")
+            strio.write("\t\t{\n")
+            strio.write("\t\t\t" + self.atom_clauses[0].to_sparql())
+            strio.write("\t\t}\n")
 
-            strio.write("UNION {\n")
+            strio.write("\tUNION {\n")
             for constraint in self.atom_clauses[1:]:
-                strio.write("\t\t" + constraint.to_sparql())
-            strio.write("\t}\n")
+                strio.write("\t\t\t" + constraint.to_sparql())
+            strio.write("\t\t}\n")
             strio.write("\t}\n")
         else:
-            strio.write("UNION {\n")
-            strio.write("\t\t" + self.atom_clauses[0].to_sparql())
+            strio.write("\tUNION {\n")
+            strio.write("\t\t\t" + self.atom_clauses[0].to_sparql())
             strio.write("\t}\n")
         return strio.getvalue()
 
@@ -548,7 +547,7 @@ class UnarySelectQuery(SelectQuery):
                     case 'dataset':
                         pass
                     case _:
-                        log.error("Illegal key %s", key)
+                        logging.error("Illegal key %s", key)
         except Exception as e:
             raise ValueError(f"Malformed query due to: {e}")
 
