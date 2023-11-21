@@ -105,7 +105,7 @@ class Clause(object):
                 subject = Variable(subject) if subject.startswith("?") else Identifier(subject)
 
         self.subject = subject
-     #   self.property = None
+        #   self.property = None
         self.argument = None
 
     def to_sparql(self) -> str:
@@ -327,18 +327,15 @@ class UnionClause(Clause):
                                             method=method))
 
     def to_sparql(self) -> str:
-        match len(self.atom_clauses):
-            case 0:
-                return ""
-            case 1:
-                return self.atom_clauses[0].to_sparql()
-            case _:
-                strio = StringIO()
-                strio.write("UNION {\n")
-                for constraint in self.atom_clauses:
-                    strio.write("\t\t" + constraint.to_sparql())
-                strio.write("\t}\n")
-                return strio.getvalue()
+        if self.atom_clauses:
+            strio = StringIO()
+            strio.write("UNION {\n")
+            for constraint in self.atom_clauses:
+                strio.write("\t\t" + constraint.to_sparql())
+            strio.write("\t}\n")
+            return strio.getvalue()
+        else:
+            raise ValueError("Invalid union clauses")
 
     def to_dict(self, version: str = "latest") -> dict:
         out = {
