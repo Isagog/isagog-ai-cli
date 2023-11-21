@@ -8,6 +8,8 @@ from io import StringIO
 
 from rdflib import RDF, RDFS, OWL, URIRef
 
+from isagog.client.kg_client import log
+
 
 class Identifier(URIRef):
     """
@@ -543,8 +545,10 @@ class UnarySelectQuery(SelectQuery):
                         self.lang = str(val)
                     case 'min_score' | 'minScore':  # backward compatibility
                         self.min_score = float(val)
+                    case 'dataset':
+                        pass
                     case _:
-                        raise ValueError(f"Illegal key {key}")
+                        log.error("Illegal key %s", key)
         except Exception as e:
             raise ValueError(f"Malformed query due to: {e}")
 
