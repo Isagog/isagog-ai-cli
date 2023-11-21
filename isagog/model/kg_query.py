@@ -327,15 +327,25 @@ class UnionClause(Clause):
                                             method=method))
 
     def to_sparql(self) -> str:
-        if self.atom_clauses:
-            strio = StringIO()
+        assert self.atom_clauses
+        strio = StringIO()
+        if len(self.atom_clauses) > 1:
+            strio.write("\t{\n")
+
+            strio.write("\t{\n")
+            strio.write("\t\t" + self.atom_clauses[0].to_sparql())
+            strio.write("\t}\n")
+
             strio.write("UNION {\n")
-            for constraint in self.atom_clauses:
+            for constraint in self.atom_clauses[1:]:
                 strio.write("\t\t" + constraint.to_sparql())
             strio.write("\t}\n")
-            return strio.getvalue()
+            strio.write("\t}\n")
         else:
-            raise ValueError("Invalid union clauses")
+            strio.write("UNION {\n")
+            strio.write("\t\t" + self.atom_clauses[0].to_sparql())
+            strio.write("\t}\n")
+        return strio.getvalue()
 
     def to_dict(self, version: str = "latest") -> dict:
         out = {
@@ -480,20 +490,19 @@ class UnarySelectQuery(SelectQuery):
         super().add(clause)
 
     def add_kinds(self, kind_refs: list[str]):
-        # self.add(AtomClause(subject=self.subject,
-        #                     property=RDF_TYPE,
-        #                     argument=Variable("k"),
-        #                     project=True))
-        if len(kind_refs) == 1:
-            self.add(AtomClause(subject=self.subject,
-                                property=RDF_TYPE,
-                                argument=Identifier(kind_refs[0]),
-                                method=Comparison.EXACT,
-                                project=False,
-                                optional=False))
-        elif len(kind_refs) > 1:
+        if not kind_refs:
+            return
+
+        self.add(AtomClause(subject=self.subject,
+                            property=RDF_TYPE,
+                            argument=Identifier(kind_refs[0]),
+                            method=Comparison.EXACT,
+                            project=False,
+                            optional=False))
+
+        if len(kind_refs) > 1:
             kind_union = UnionClause(subject=self.subject)
-            for kind in kind_refs:
+            for kind in kind_refs[1:]:
                 kind_union.add_clause(property=RDF_TYPE, argument=Identifier(kind), method=Comparison.EXACT)
             self.add(kind_union)
 
@@ -556,8 +565,10 @@ class UnarySelectQuery(SelectQuery):
             for clause in self.atom_clauses():
                 strio.write("\t\t" + clause.to_sparql())
             strio.write("\t}\n")
+
             for clause in self.union_clauses():
                 strio.write(clause.to_sparql())
+            # strio.write("\t}\n")
         else:
             for clause in self.clauses:
                 strio.write("\t" + clause.to_sparql())
