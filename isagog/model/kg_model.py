@@ -337,7 +337,11 @@ class Individual(Entity):
                            kwargs.get('attributes', list[AttributeInstance]())]
         self.relations = [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())]
         self.score = float(kwargs.get('score', 0.0))
-        self.statements = int(kwargs.get('statements', 0))
+        stat_attr = self.get_attribute('statements')
+        if stat_attr is not VOID_ATTRIBUTE:
+            self.statements = int(stat_attr[0])
+        else:
+            self.statements = 0
 
     def get_attribute(self, attribute_id: str) -> AttributeInstance | Any:
         found = next(filter(lambda x: x.property == attribute_id, self.attributes), None)
