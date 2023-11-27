@@ -337,7 +337,7 @@ class Individual(Entity):
                            kwargs.get('attributes', list[AttributeInstance]())]
         self.relations = [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())]
         self.score = float(kwargs.get('score', 0.0))
-        stat_attr = self.get_attribute('statements')
+        stat_attr = self.get_attribute(attribute_id="https://isagog.com/ontology#statements")
         if stat_attr is not VOID_ATTRIBUTE:
             self.statements = int(stat_attr[0])
         else:
