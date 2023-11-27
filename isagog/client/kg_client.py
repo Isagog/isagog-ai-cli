@@ -95,9 +95,11 @@ class KnowledgeBase(object):
         for prop in properties:
             query.add_fetch_clause(predicate=str(prop))
 
+        query_dict = query.to_dict(self.version)
+
         res = requests.post(
             url=self.route,
-            json=query.to_dict(self.version),
+            json=query_dict,
             headers={"Accept": "application/json"},
             timeout=30
         )
@@ -110,14 +112,14 @@ class KnowledgeBase(object):
             else:
                 res_attrib_list = res_list[0].get('attributes', OSError("malformed response"))
 
-                def __get_values(prop: str) -> str:
+                def __get_values(_prop: str) -> str:
                     try:
-                        record = next(item for item in res_attrib_list if item['id'] == prop)
+                        record = next(item for item in res_attrib_list if item['id'] == _prop)
                         return record.get('values', OSError("malformed response"))
                     except StopIteration:
-                        raise OSError("incomplete response: %s not found", prop)
+                        raise OSError("incomplete response: %s not found", _prop)
 
-                return [Assertion(predicate=prop, values=__get_values(f"<{prop}>")) for prop in properties]
+                return [Assertion(predicate=prop, values=__get_values(prop)) for prop in properties]
         else:
             log.warning("Query of entity %s failed due to %s", subject, res.reason)
             return []

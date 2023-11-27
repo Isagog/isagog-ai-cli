@@ -168,7 +168,7 @@ class AtomClause(Clause):
 
         super().__init__(subject)
         self.property = property
-        self.argument = self._instantiate_argument(argument) if argument else None
+        self.argument = self._instantiate_argument(argument) if argument else variable if variable else Variable()
         self.variable = variable  # else argument  # argument's variable
         self.method = method
         self.project = project
@@ -274,7 +274,6 @@ class AtomClause(Clause):
                         self.variable = Variable("i")  # the query subject
                     else:
                         self.variable = Variable(val)
-
                     if self.argument is None:
                         self.argument = self.variable
                 case 'argument':
@@ -478,11 +477,11 @@ class UnarySelectQuery(SelectQuery):
         else:
             self.subject = Variable("i")
 
-        self.add(AtomClause(subject=self.subject,
-                            property=RDF_TYPE,
-                            argument=Variable("k"),
-                            project=True))
         if kinds:
+            self.add(AtomClause(subject=self.subject,
+                                property=RDF_TYPE,
+                                argument=Variable("k"),
+                                project=True))
             self.add_kinds(kinds)
 
     def add(self, clause: Clause):
@@ -593,10 +592,11 @@ class UnarySelectQuery(SelectQuery):
         if version == "latest" or version > "v1.0.0":
             out['subject'] = self.subject
 
-        kinds = self.get_kinds()
-        if len(kinds) > 0:
-            out["kinds"] = kinds
-        out["clauses"] = [c.to_dict(version) for c in self.property_clauses()]
+        # kinds = self.get_kinds()
+        # if len(kinds) > 0:
+        #     out["kinds"] = kinds
+        # out["clauses"] = [c.to_dict(version) for c in self.property_clauses()]
+        out['clauses'] = [c.to_dict(version) for c in self.clauses]
         out['graph'] = self.graph
         out['limit'] = self.limit
         out['lang'] = self.lang
