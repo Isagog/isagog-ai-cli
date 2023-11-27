@@ -339,7 +339,7 @@ class Individual(Entity):
         self.score = float(kwargs.get('score', 0.0))
         stat_attr = self.get_attribute(attribute_id="https://isagog.com/ontology#statements")
         if stat_attr is not VOID_ATTRIBUTE:
-            self.statements = int(stat_attr[0])
+            self.statements = int(stat_attr.values[0])
         else:
             self.statements = 0
 
