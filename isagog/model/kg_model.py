@@ -337,11 +337,14 @@ class Individual(Entity):
                            kwargs.get('attributes', list[AttributeInstance]())]
         self.relations = [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())]
         self.score = float(kwargs.get('score', 0.0))
-        stat_attr = self.get_attribute(attribute_id="https://isagog.com/ontology#statements")
-        if stat_attr is not VOID_ATTRIBUTE:
-            self.statements = int(stat_attr.values[0])
+        if self.has_attribute("https://isagog.com/ontology#profile"):
+            self.profile = self.get_attribute("https://isagog.com/ontology#profile")
         else:
-            self.statements = 0
+            self.profile = None
+
+    def has_attribute(self, attribute_id: str) -> bool:
+        found = next(filter(lambda x: x.property == attribute_id, self.attributes), None)
+        return found and not found.is_empty()
 
     def get_attribute(self, attribute_id: str) -> AttributeInstance | Any:
         found = next(filter(lambda x: x.property == attribute_id, self.attributes), None)
@@ -349,6 +352,10 @@ class Individual(Entity):
             return found
         else:
             return VOID_ATTRIBUTE
+
+    def has_relation(self, relation_id: str) -> bool:
+        found = next(filter(lambda x: x.property == relation_id, self.relations), None)
+        return found and not found.is_empty()
 
     def get_relation(self, relation_id: str) -> RelationInstance | Any:
         found = next(filter(lambda x: x.property == relation_id, self.relations), None)
