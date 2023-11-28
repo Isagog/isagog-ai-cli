@@ -36,12 +36,16 @@ class Variable(str):
     """
 
     @staticmethod
-    def is_valid_variable(var_string):
+    def is_valid_variable_value(var_string):
         try:
             Variable(var_string)
             return True
         except ValueError:
             return False
+
+    @staticmethod
+    def is_valid_variable_id(var_string):
+        return var_string.startswith('?')
 
     def __new__(cls, value=None):
 
@@ -249,7 +253,7 @@ class AtomClause(Clause):
         if subject and not (isinstance(subject, Variable) or isinstance(subject, Identifier)):
             if Identifier.is_valid_id(str(subject)):
                 subject = Identifier(str(subject))
-            elif Variable.is_valid_variable(str(subject)):
+            elif Variable.is_valid_variable_value(str(subject)):
                 subject = Variable(str(subject))
             else:
                 raise ValueError(f"Invalid subject {subject}")
@@ -276,12 +280,12 @@ class AtomClause(Clause):
                         self.variable = Variable(val)
                     if self.argument is None:
                         self.argument = self.variable
-                case 'argument' | 'value' | 'identifier':  # for compatibility
-                    self.argument = Variable(val) if Variable.is_valid_variable(val) \
-                        else Identifier(val) if Identifier.is_valid_id(val) \
+                case 'argument' | 'identifier':  # for compatibility
+                    self.argument = Identifier(val) if Identifier.is_valid_id(val) \
+                        else Variable(val) if Variable.is_valid_variable_id(val) \
                         else Value(val)
-                # case 'value':
-                #     self.argument = Value(val)
+                case 'value':
+                    self.argument = Value(val)
                 # case 'identifier':
                 #     self.argument = Identifier(val)
                 case 'method':
