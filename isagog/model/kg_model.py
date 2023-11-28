@@ -338,9 +338,12 @@ class Individual(Entity):
         self.relations = [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())]
         self.score = float(kwargs.get('score', 0.0))
         if self.has_attribute("https://isagog.com/ontology#profile"):
-            self.profile = self.get_attribute("https://isagog.com/ontology#profile")
+            self.profile = [
+                 profile_value.split("=")
+                 for profile_value in self.get_attribute("https://isagog.com/ontology#profile").values
+            ]
         else:
-            self.profile = None
+            self.profile = []
 
     def has_attribute(self, attribute_id: str) -> bool:
         found = next(filter(lambda x: x.property == attribute_id, self.attributes), None)
