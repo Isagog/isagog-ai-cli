@@ -276,14 +276,14 @@ class AtomClause(Clause):
                         self.variable = Variable(val)
                     if self.argument is None:
                         self.argument = self.variable
-                case 'argument':
+                case 'argument' | 'value' | 'identifier':  # for compatibility
                     self.argument = Variable(val) if Variable.is_valid_variable(val) \
                         else Identifier(val) if Identifier.is_valid_id(val) \
                         else Value(val)
-                case 'value':
-                    self.argument = Value(val)
-                case 'identifier':
-                    self.argument = Identifier(val)
+                # case 'value':
+                #     self.argument = Value(val)
+                # case 'identifier':
+                #     self.argument = Identifier(val)
                 case 'method':
                     self.method = Comparison(val)
                 case 'project':
