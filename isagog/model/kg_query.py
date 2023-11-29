@@ -172,7 +172,7 @@ class AtomClause(Clause):
 
         super().__init__(subject)
         self.property = property
-        self.argument = self._instantiate_argument(argument) if argument else variable if variable else Variable()
+        self.argument = self._instantiate_argument(argument) if argument else variable if variable else None
         self.variable = variable  # else argument  # argument's variable
         self.method = method
         self.project = project
