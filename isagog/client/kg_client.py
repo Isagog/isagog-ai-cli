@@ -8,7 +8,7 @@ from typing import Type, TypeVar, Any
 import requests
 
 from isagog.model.kg_query import UnarySelectQuery, UnionClause, AtomClause, Comparison, Value
-from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation
+from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, ID
 
 log = logging.getLogger("isagog-cli")
 
@@ -38,12 +38,12 @@ class KnowledgeBase(object):
         self.ontology = ontology
         self.version = version
 
-    def fetch_entity(self,
-                     _id: str,
-                     expand: bool = True,
-                     limit: int = 1024,
-                     entity_type: Type[E] = Entity
-                     ) -> E | None:
+    def get_entity(self,
+                   _id: str,
+                   expand: bool = True,
+                   limit: int = 1024,
+                   entity_type: Type[E] = Entity
+                   ) -> E | None:
         """
         Gets all individual entity data from the kg
 
@@ -163,10 +163,10 @@ class KnowledgeBase(object):
 
         return entities
 
-    def query_individual(self,
-                         query: UnarySelectQuery,
-                         kind: Type[E] = Individual,
-                         ) -> list[E]:
+    def query_individuals(self,
+                          query: UnarySelectQuery,
+                          kind: Type[E] = Individual,
+                          ) -> list[E]:
 
         req = query.to_dict(self.version)
 
@@ -185,3 +185,37 @@ class KnowledgeBase(object):
         else:
             log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
             return []
+
+    def upsert_individual(self, individual: Individual, auth_token=None) -> bool:
+        """
+        Updates an individual or insert it if not present; existing properties are preserved
+
+        :param individual: the individual
+        :param auth_token:
+        :return:
+        """
+        req = individual.to_dict()
+
+        if self.dataset and (self.version == "latest" or self.version > "v1.0.0"):
+            req['dataset'] = self.dataset
+
+        headers = {"Accept": "application/json"}
+
+        if auth_token:
+            headers['Authorization'] = f'Bearer {auth_token}'
+
+        res = requests.patch(
+            url=self.route,
+            json=req,
+            headers=headers,
+            timeout=30
+        )
+
+        if res.ok:
+            return True
+        else:
+            raise OSError(f"upsert failed {res.status_code}")
+
+
+    def delete_individual(self, _id: ID, auth_key=None):
+        pass

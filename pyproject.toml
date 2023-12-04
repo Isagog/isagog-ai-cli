@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "isagog-ai"
-version = "0.3.9"
+version = "0.4.0"
 description = ""
 authors = ["Guido Vetere <g.vetere@isagog.com>"]
 readme = "README.md"
