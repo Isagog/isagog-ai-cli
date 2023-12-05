@@ -194,18 +194,24 @@ class KnowledgeBase(object):
         :param auth_token:
         :return:
         """
-        req = individual.to_dict()
+
+        params = {
+            'id': individual.id
+        }
 
         if self.dataset and (self.version == "latest" or self.version > "v1.0.0"):
-            req['dataset'] = self.dataset
+            params['dataset'] = self.dataset
+
+        req = individual.to_dict()
 
         headers = {"Accept": "application/json"}
 
         if auth_token:
-            headers['Authorization'] = f'Bearer {auth_token}'
+            headers["Authorization"] = f'Bearer {auth_token}'
 
         res = requests.patch(
             url=self.route,
+            params=params,
             json=req,
             headers=headers,
             timeout=30
@@ -215,7 +221,6 @@ class KnowledgeBase(object):
             return True
         else:
             raise OSError(f"upsert failed {res.status_code}")
-
 
     def delete_individual(self, _id: ID, auth_key=None):
         pass
