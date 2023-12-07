@@ -79,11 +79,13 @@ class KnowledgeBase(object):
 
     def query_assertions(self,
                          subject: Individual,
-                         properties: list[Attribute | Relation]
+                         properties: list[Attribute | Relation],
+                         timeout=30
                          ) -> list[Assertion]:
         """
         Returns entity properties, if any
 
+        :param timeout:
         :param subject:
         :param properties: the queried properties
         :return: a list of dictionaries { property: values }
@@ -101,7 +103,7 @@ class KnowledgeBase(object):
             url=self.route,
             json=query_dict,
             headers={"Accept": "application/json"},
-            timeout=30
+            timeout=timeout
         )
 
         if res.ok:
@@ -127,9 +129,11 @@ class KnowledgeBase(object):
     def search_individuals(self,
                            kinds: list[Concept] = None,
                            search_values: dict[Attribute, Value] = None,
+                           timeout=30
                            ) -> list[Individual]:
         """
         Retrieves individuals by string search
+        :param timeout:
         :param kinds:
         :param search_values:
         :return:
@@ -153,7 +157,7 @@ class KnowledgeBase(object):
             url=self.route,
             json=query.to_dict(self.version),
             headers={"Accept": "application/json"},
-            timeout=30
+            timeout=timeout
         )
 
         if res.ok:
@@ -166,7 +170,15 @@ class KnowledgeBase(object):
     def query_individuals(self,
                           query: UnarySelectQuery,
                           kind: Type[E] = Individual,
+                          timeout=30
                           ) -> list[E]:
+        """
+
+        :param query:
+        :param kind:
+        :param timeout:
+        :return:
+        """
 
         req = query.to_dict(self.version)
 
@@ -177,7 +189,7 @@ class KnowledgeBase(object):
             url=self.route,
             json=req,
             headers={"Accept": "application/json"},
-            timeout=30
+            timeout=timeout
         )
 
         if res.ok:
@@ -213,8 +225,7 @@ class KnowledgeBase(object):
             url=self.route,
             params=params,
             json=req,
-            headers=headers,
-            timeout=30
+            headers=headers
         )
 
         if res.ok:
