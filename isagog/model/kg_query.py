@@ -272,7 +272,11 @@ class AtomClause(Clause):
                     if self.subject:
                         pass
                     else:
-                        self.subject = Identifier(val)
+                        self.subject = Identifier(val) if Identifier.is_valid_id(val) \
+                            else Variable(val) if Variable.is_valid_variable_id(val) \
+                            else None
+                        if not self.subject:
+                            raise ValueError(f"Invalid subject value {val}")
                 case 'variable':
                     if val == "query.subject":
                         self.variable = Variable("i")  # the query subject
