@@ -104,14 +104,11 @@ DEFAULT_PREFIXES = [("rdf", "http://www.w3.org/2000/01/rdf-schema"),
 
 class Clause(object):
 
-    def __init__(self, subject: Identifier | Variable | str = None):
-        if subject:
-            if isinstance(subject, str):
-                subject = Variable(subject) if subject.startswith("?") else Identifier(subject)
-
+    def __init__(self,
+                 subject: Identifier | Variable | str = None,
+                 optional=False):
         self.subject = subject
-        #   self.property = None
-        self.argument = None
+        self.optional = optional
 
     def to_sparql(self) -> str:
         pass
@@ -122,8 +119,11 @@ class Clause(object):
     def is_defined(self) -> bool:
         return self.subject is not None
 
-    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
-        pass
+    def from_dict(self, data: dict, **kwargs):
+         pass
+
+  #  def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
+  #      pass
 
 
 class AtomClause(Clause):
@@ -170,15 +170,16 @@ class AtomClause(Clause):
 
         """
 
-        super().__init__(subject)
+        super().__init__(subject=subject, optional=optional)
+
+        self.subject = subject
+        if self.subject and isinstance(subject, str):
+            self.subject = Variable(subject) if subject.startswith("?") else Identifier(subject)
         self.property = property
         self.argument = self._instantiate_argument(argument) if argument else variable if variable else None
         self.variable = variable  # else argument  # argument's variable
         self.method = method
         self.project = project
-        self.optional = optional
-
-    # self._temp_vars = 0
 
     def is_defined(self) -> bool:
         return self.subject and self.property and (self.argument or self.variable)
@@ -246,10 +247,13 @@ class AtomClause(Clause):
 
         return out
 
-    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
+    def from_dict(self,  data: dict, **kwargs):
         """
         Openapi spec:  components.schemas.Clause
         """
+        subject = kwargs.get('subject') #: Variable | Identifier,
+        version = kwargs.get('version', 'latest')
+
         if subject and not (isinstance(subject, Variable) or isinstance(subject, Identifier)):
             if Identifier.is_valid_id(str(subject)):
                 subject = Identifier(str(subject))
@@ -302,10 +306,102 @@ class AtomClause(Clause):
                     raise ValueError(f"Invalid clause key {key}")
 
 
-class UnionClause(Clause):
+class CompositeClause(Clause):
+    """
+        A list of atomic clauses
+    """
+
+    def __init__(self,
+                 subject: Identifier | Variable = None,
+                 atom_clauses: list[AtomClause] = None,
+                 optional=False
+                 ):
+        super().__init__(subject=subject if subject else Variable(),
+                         optional=optional)
+
+        if not atom_clauses:
+            atom_clauses = list[AtomClause]()
+
+        self.atom_clauses = atom_clauses
+
+    def add_clause(self,
+                   property: Identifier,
+                   argument: Value | Variable | Identifier,
+                   method=Comparison.EXACT,
+                   project=False,
+                   optional=False):
+        self.atom_clauses.append(AtomClause(subject=self.subject,
+                                            property=property,
+                                            argument=argument,
+                                            method=method,
+                                            project=project,
+                                            optional=optional))
+
+
+class ConjunctiveClause(CompositeClause):
+    """
+    A list of atomic clauses which are evaluated in 'and'
+    """
+
+    def __init__(self,
+                 atom_clauses: list[AtomClause] = None,
+                 optional=False):
+        super().__init__(atom_clauses=atom_clauses,
+                         optional=optional)
+
+    def to_sparql(self) -> str:
+
+        strio = StringIO()
+        if len(self.atom_clauses) > 1:
+            if self.optional:
+                strio.write("\t OPTIONAL")
+            strio.write("\t{\n")
+            for clause in self.atom_clauses[1:]:
+                strio.write("\t\t\t" + clause.to_sparql())
+            strio.write("\t\t}\n")
+            strio.write("\t}\n")
+        else:
+            strio.write("\t\t\t" + self.atom_clauses[0].to_sparql())
+
+        return strio.getvalue()
+
+    def to_dict(self, version: str = "latest") -> dict:
+        out = {
+            'clauses': [c.to_dict() for c in self.atom_clauses]
+        }
+
+        match version:
+            case "latest":
+                out['type'] = "conjunction"
+            case "v1.0.0":
+                pass
+
+        return out
+
+    def from_dict(self, data: dict, **kwargs):
+
+        version = kwargs.get('version', 'latest')
+        self.subject = kwargs.get('subject') #: Variable | Identifier,
+        for atom_dict in data.get('clauses', []):
+            atom = AtomClause()
+            subject = atom_dict.get('subject', self.subject)
+            atom.from_dict(data=atom_dict, subject=subject)
+            self.atom_clauses.append(atom)
+
+
+class UnionClause(CompositeClause):
     """
     A list of atomic clauses on the same subject, which are evaluated in 'or'
     """
+
+    def __init__(self,
+                 subject: Identifier | Variable = None,
+                 atom_clauses: list[AtomClause] = None
+                 ):
+        super().__init__(subject, atom_clauses)
+
+        if not self._validate_union_clauses(atom_clauses):
+            raise ValueError("Invalid union clauses")
 
     @staticmethod
     def _validate_union_clauses(clauses: list[AtomClause]) -> bool:
@@ -313,26 +409,6 @@ class UnionClause(Clause):
             return True
         subject = clauses[0].subject
         return all(clause.subject == subject for clause in clauses)
-
-    def __init__(self,
-                 subject: Identifier | Variable = None,
-                 atom_clauses: list[AtomClause] = None):
-        super().__init__(subject if subject else Variable())
-        if not atom_clauses:
-            atom_clauses = list[AtomClause]()
-        else:
-            if not self._validate_union_clauses(atom_clauses):
-                raise ValueError("Invalid union clauses")
-        self.atom_clauses = atom_clauses
-
-    def add_clause(self,
-                   property: Identifier,
-                   argument: Value | Variable | Identifier,
-                   method=Comparison.EXACT):
-        self.atom_clauses.append(AtomClause(subject=self.subject,
-                                            property=property,
-                                            argument=argument,
-                                            method=method))
 
     def to_sparql(self) -> str:
         assert self.atom_clauses
@@ -369,12 +445,12 @@ class UnionClause(Clause):
 
         return out
 
-    def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
-        self.subject = subject
+    def from_dict(self, data: dict, **kwargs):
+
         for atom_dict in data.get('clauses', []):
             atom = AtomClause()
             subject = atom_dict.get('subject', self.subject)
-            atom.from_dict(subject=subject, data=atom_dict)
+            atom.from_dict(data=atom_dict, subject=subject)
             self.atom_clauses.append(atom)
 
 
@@ -538,10 +614,12 @@ class UnarySelectQuery(SelectQuery):
                                     clause = AtomClause()
                                 case 'union':
                                     clause = UnionClause()
+                                case 'conjunction':
+                                    clause = ConjunctiveClause()
                                 case _:
                                     raise ValueError(f"Clause type unknown")
                             subject = clause_data.get('subject', self.subject)
-                            clause.from_dict(subject=subject, data=clause_data)
+                            clause.from_dict(data=clause_data, subject=subject)
                             self.add(clause)
                     case 'graph':
                         self.graph = str(val)
