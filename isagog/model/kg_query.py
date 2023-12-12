@@ -163,7 +163,7 @@ class AtomClause(Clause):
                  argument: Value | Identifier | Variable = None,
                  variable: Variable = None,
                  method: Comparison = Comparison.ANY,
-                 project=False,
+                 project=True,
                  optional=False):
         """
         A select clause
@@ -446,11 +446,11 @@ class UnionClause(CompositeClause):
         return out
 
     def from_dict(self, data: dict, **kwargs):
-
+        subject = kwargs.get('subject', self.subject)
         for atom_dict in data.get('clauses', []):
             atom = AtomClause()
-            subject = atom_dict.get('subject', self.subject)
-            atom.from_dict(data=atom_dict, subject=subject)
+            atom.from_dict(data=atom_dict,
+                           subject=atom_dict.get('subject', subject))
             self.atom_clauses.append(atom)
 
 
