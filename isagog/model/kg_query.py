@@ -120,13 +120,14 @@ class Clause(object):
         return self.subject is not None
 
     def from_dict(self, data: dict, **kwargs):
-         pass
-
-  #  def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
-  #      pass
+        pass
 
 
-class AtomClause(Clause):
+#  def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
+#      pass
+
+
+class AtomicClause(Clause):
 
     @staticmethod
     def _instantiate_argument(arg) -> Value | Identifier | Variable:
@@ -247,14 +248,19 @@ class AtomClause(Clause):
 
         return out
 
-    def from_dict(self,  data: dict, **kwargs):
+    def from_dict(self, data: dict, **kwargs):
         """
         Openapi spec:  components.schemas.Clause
         """
-        subject = kwargs.get('subject') #: Variable | Identifier,
+        subject = kwargs.get('subject')  #: Variable | Identifier,
         version = kwargs.get('version', 'latest')
 
-        if subject and not (isinstance(subject, Variable) or isinstance(subject, Identifier)):
+        if subject == "query.subject":
+            subject = Variable("i")
+        elif subject and not (
+                isinstance(subject, Variable)
+                or isinstance(subject, Identifier)
+                ):
             if Identifier.is_valid_id(str(subject)):
                 subject = Identifier(str(subject))
             elif Variable.is_valid_variable_value(str(subject)):
@@ -313,29 +319,32 @@ class CompositeClause(Clause):
 
     def __init__(self,
                  subject: Identifier | Variable = None,
-                 atom_clauses: list[AtomClause] = None,
+                 clauses: list[Clause] = None,
                  optional=False
                  ):
         super().__init__(subject=subject if subject else Variable(),
                          optional=optional)
 
-        if not atom_clauses:
-            atom_clauses = list[AtomClause]()
+        if not clauses:
+            clauses = list[Clause]()
 
-        self.atom_clauses = atom_clauses
+        self.clauses = clauses
 
-    def add_clause(self,
-                   property: Identifier,
-                   argument: Value | Variable | Identifier,
-                   method=Comparison.EXACT,
-                   project=False,
-                   optional=False):
-        self.atom_clauses.append(AtomClause(subject=self.subject,
-                                            property=property,
-                                            argument=argument,
-                                            method=method,
-                                            project=project,
-                                            optional=optional))
+    def add_atomic_clause(self,
+                          property: Identifier,
+                          argument: Value | Variable | Identifier,
+                          method=Comparison.EXACT,
+                          project=False,
+                          optional=False):
+        self.clauses.append(AtomicClause(subject=self.subject,
+                                         property=property,
+                                         argument=argument,
+                                         method=method,
+                                         project=project,
+                                         optional=optional))
+
+    def add_clause(self, clause: Clause):
+        self.clauses.append(clause)
 
 
 class ConjunctiveClause(CompositeClause):
@@ -344,30 +353,30 @@ class ConjunctiveClause(CompositeClause):
     """
 
     def __init__(self,
-                 atom_clauses: list[AtomClause] = None,
+                 clauses: list[Clause] = None,
                  optional=False):
-        super().__init__(atom_clauses=atom_clauses,
+        super().__init__(clauses=clauses,
                          optional=optional)
 
     def to_sparql(self) -> str:
 
         strio = StringIO()
-        if len(self.atom_clauses) > 1:
+        if len(self.clauses) > 1:
             if self.optional:
-                strio.write("\t OPTIONAL")
+                strio.write("OPTIONAL")
             strio.write("\t{\n")
-            for clause in self.atom_clauses[1:]:
+            for clause in self.clauses[1:]:
                 strio.write("\t\t\t" + clause.to_sparql())
             strio.write("\t\t}\n")
-            strio.write("\t}\n")
+            # strio.write("\t}\n")
         else:
-            strio.write("\t\t\t" + self.atom_clauses[0].to_sparql())
+            strio.write("\t\t\t" + self.clauses[0].to_sparql())
 
         return strio.getvalue()
 
     def to_dict(self, version: str = "latest") -> dict:
         out = {
-            'clauses': [c.to_dict() for c in self.atom_clauses]
+            'clauses': [c.to_dict() for c in self.clauses]
         }
 
         match version:
@@ -381,60 +390,61 @@ class ConjunctiveClause(CompositeClause):
     def from_dict(self, data: dict, **kwargs):
 
         version = kwargs.get('version', 'latest')
-        self.subject = kwargs.get('subject') #: Variable | Identifier,
+        self.subject = kwargs.get('subject')  #: Variable | Identifier,
+        self.optional = bool(data.get('optional', False))
         for atom_dict in data.get('clauses', []):
-            atom = AtomClause()
+            atom = AtomicClause()
             subject = atom_dict.get('subject', self.subject)
             atom.from_dict(data=atom_dict, subject=subject)
-            self.atom_clauses.append(atom)
+            self.clauses.append(atom)
 
 
-class UnionClause(CompositeClause):
+class DisjunctiveClause(CompositeClause):
     """
     A list of atomic clauses on the same subject, which are evaluated in 'or'
     """
 
     def __init__(self,
                  subject: Identifier | Variable = None,
-                 atom_clauses: list[AtomClause] = None
+                 clauses: list[AtomicClause] = None
                  ):
-        super().__init__(subject, atom_clauses)
+        super().__init__(subject, clauses)
 
-        if not self._validate_union_clauses(atom_clauses):
+        if not self._validate_union_clauses(clauses):
             raise ValueError("Invalid union clauses")
 
     @staticmethod
-    def _validate_union_clauses(clauses: list[AtomClause]) -> bool:
+    def _validate_union_clauses(clauses: list[AtomicClause]) -> bool:
         if not clauses:
             return True
         subject = clauses[0].subject
         return all(clause.subject == subject for clause in clauses)
 
     def to_sparql(self) -> str:
-        assert self.atom_clauses
+        assert self.clauses
         strio = StringIO()
-        if len(self.atom_clauses) > 1:
+        if len(self.clauses) > 1:
             strio.write("\t{\n")
 
             strio.write("\t\t{\n")
-            strio.write("\t\t\t" + self.atom_clauses[0].to_sparql())
+            strio.write("\t\t\t" + self.clauses[0].to_sparql())
             strio.write("\t\t}\n")
 
             strio.write("\tUNION {\n")
-            for constraint in self.atom_clauses[1:]:
+            for constraint in self.clauses[1:]:
                 strio.write("\t\t\t" + constraint.to_sparql())
             strio.write("\t\t}\n")
             strio.write("\t}\n")
         else:
             strio.write("\tUNION {\n")
-            strio.write("\t\t\t" + self.atom_clauses[0].to_sparql())
+            strio.write("\t\t\t" + self.clauses[0].to_sparql())
             strio.write("\t}\n")
         return strio.getvalue()
 
     def to_dict(self, version: str = "latest") -> dict:
         out = {
             'subject': self.subject,
-            'clauses': [c.to_dict() for c in self.atom_clauses]
+            'clauses': [c.to_dict() for c in self.clauses]
         }
 
         match version:
@@ -448,10 +458,10 @@ class UnionClause(CompositeClause):
     def from_dict(self, data: dict, **kwargs):
         subject = kwargs.get('subject', self.subject)
         for atom_dict in data.get('clauses', []):
-            atom = AtomClause()
+            atom = AtomicClause()
             atom.from_dict(data=atom_dict,
                            subject=atom_dict.get('subject', subject))
-            self.atom_clauses.append(atom)
+            self.clauses.append(atom)
 
 
 class SelectQuery(object):
@@ -485,13 +495,13 @@ class SelectQuery(object):
         self.min_score = min_score
 
     def add(self, clause: Clause):
-        if isinstance(clause, AtomClause) and clause.method == Comparison.KEYWORD:
+        if isinstance(clause, AtomicClause) and clause.method == Comparison.KEYWORD:
             self.clauses.insert(0, clause)
         else:
             self.clauses.append(clause)
 
-    def project_clauses(self) -> list[AtomClause]:
-        return [c for c in self.clauses if isinstance(c, AtomClause) and c.project]
+    def project_clauses(self) -> list[AtomicClause]:
+        return [c for c in self.clauses if isinstance(c, AtomicClause) and c.project]
 
     def project_vars(self) -> set[str]:
         """
@@ -499,7 +509,7 @@ class SelectQuery(object):
         """
         _vars = []
         for c in self.clauses:
-            if isinstance(c, AtomClause) and c.project:
+            if isinstance(c, AtomicClause) and c.project:
                 if isinstance(c.argument, Variable):
                     _vars.append(c.argument)
                 if isinstance(c.subject, Variable):
@@ -562,10 +572,10 @@ class UnarySelectQuery(SelectQuery):
             self.subject = Variable("i")
 
         if kinds:
-            self.add(AtomClause(subject=self.subject,
-                                property=RDF_TYPE,
-                                argument=Variable("k"),
-                                project=True))
+            self.add(AtomicClause(subject=self.subject,
+                                  property=RDF_TYPE,
+                                  argument=Variable("k"),
+                                  project=True))
             self.add_kinds(kinds)
 
     def add(self, clause: Clause):
@@ -577,24 +587,24 @@ class UnarySelectQuery(SelectQuery):
         if not kind_refs:
             return
 
-        self.add(AtomClause(subject=self.subject,
-                            property=RDF_TYPE,
-                            argument=Identifier(kind_refs[0]),
-                            method=Comparison.EXACT,
-                            project=False,
-                            optional=False))
+        self.add(AtomicClause(subject=self.subject,
+                              property=RDF_TYPE,
+                              argument=Identifier(kind_refs[0]),
+                              method=Comparison.EXACT,
+                              project=False,
+                              optional=False))
 
         if len(kind_refs) > 1:
-            kind_union = UnionClause(subject=self.subject)
+            kind_union = DisjunctiveClause(subject=self.subject)
             for kind in kind_refs[1:]:
-                kind_union.add_clause(property=RDF_TYPE, argument=Identifier(kind), method=Comparison.EXACT)
+                kind_union.add_atomic_clause(property=RDF_TYPE, argument=Identifier(kind), method=Comparison.EXACT)
             self.add(kind_union)
 
     def add_match_clause(self, predicate, argument, method=Comparison.EXACT, project=False, optional=False):
-        self.add(AtomClause(property=predicate, argument=argument, method=method, project=project, optional=optional))
+        self.add(AtomicClause(property=predicate, argument=argument, method=method, project=project, optional=optional))
 
     def add_fetch_clause(self, predicate):
-        self.add(AtomClause(property=predicate, method=Comparison.ANY, project=True, optional=True))
+        self.add(AtomicClause(property=predicate, method=Comparison.ANY, project=True, optional=True))
 
     def from_dict(self, data: dict):
         """
@@ -611,9 +621,9 @@ class UnarySelectQuery(SelectQuery):
                         for clause_data in val:
                             match clause_data.get('type', 'atomic'):
                                 case 'atomic':
-                                    clause = AtomClause()
+                                    clause = AtomicClause()
                                 case 'union':
-                                    clause = UnionClause()
+                                    clause = DisjunctiveClause()
                                 case 'conjunction':
                                     clause = ConjunctiveClause()
                                 case _:
@@ -648,13 +658,16 @@ class UnarySelectQuery(SelectQuery):
         if self.is_scored():
             strio.write(f" ?score ")
         strio.write(" WHERE {\n")
-        if self.has_unions():
+        if self.has_disjunctive_clauses():
             strio.write("\t{\n")
             for clause in self.atom_clauses():
                 strio.write("\t\t" + clause.to_sparql())
+            for clause in self.conjunctive_clauses():
+                strio.write("\t\t" + clause.to_sparql())
+
             strio.write("\t}\n")
 
-            for clause in self.union_clauses():
+            for clause in self.disjunctive_clauses():
                 strio.write(clause.to_sparql())
             # strio.write("\t}\n")
         else:
@@ -690,11 +703,20 @@ class UnarySelectQuery(SelectQuery):
             out['min_score'] = self.min_score
         return out
 
-    def atom_clauses(self) -> list[AtomClause]:
-        return [c for c in self.clauses if isinstance(c, AtomClause)]
+    def atom_clauses(self) -> list[AtomicClause]:
+        return [c for c in self.clauses if isinstance(c, AtomicClause)]
 
-    def has_unions(self):
-        return len(self.union_clauses()) > 0
+    def conjunctive_clauses(self) -> list[ConjunctiveClause]:
+        return [c for c in self.clauses if isinstance(c, ConjunctiveClause)]
+
+    def disjunctive_clauses(self) -> list[DisjunctiveClause]:
+        return [c for c in self.clauses if isinstance(c, DisjunctiveClause)]
+
+    def has_disjunctive_clauses(self):
+        return len(self.disjunctive_clauses()) > 0
+
+    def has_conjunctive_clauses(self):
+        return len(self.conjunctive_clauses()) > 0
 
     @classmethod
     def new(cls, rdata: dict) -> SelectQuery:
@@ -703,7 +725,7 @@ class UnarySelectQuery(SelectQuery):
         return q
 
     def is_scored(self) -> bool:
-        return next(filter(lambda c: isinstance(c, AtomClause) and c.method == Comparison.KEYWORD, self.clauses),
+        return next(filter(lambda c: isinstance(c, AtomicClause) and c.method == Comparison.KEYWORD, self.clauses),
                     None) is not None
 
     def get_kinds(self) -> list[Identifier]:
@@ -714,11 +736,8 @@ class UnarySelectQuery(SelectQuery):
                 rt.append(c.argument)
         return rt
 
-    def atom_property_clauses(self) -> list[AtomClause]:
+    def atom_property_clauses(self) -> list[AtomicClause]:
         return [c for c in self.atom_clauses() if c.property != RDF_TYPE]
 
-    def union_clauses(self) -> list[UnionClause]:
-        return [c for c in self.clauses if isinstance(c, UnionClause)]
-
     def property_clauses(self):
-        return self.atom_property_clauses() + self.union_clauses()
+        return self.atom_property_clauses() + self.disjunctive_clauses()

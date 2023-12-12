@@ -7,7 +7,7 @@ from typing import Type, TypeVar, Any
 
 import requests
 
-from isagog.model.kg_query import UnarySelectQuery, UnionClause, AtomClause, Comparison, Value
+from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
 from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, ID
 
 log = logging.getLogger("isagog-cli")
@@ -145,11 +145,11 @@ class KnowledgeBase(object):
             query.add_kinds(kinds)
         if len(search_values) == 1:
             attribute, value = next(iter(search_values.items()))
-            search_clause = AtomClause(property=attribute, argument=value, method=Comparison.REGEX)
+            search_clause = AtomicClause(property=attribute, argument=value, method=Comparison.REGEX)
         else:
-            search_clause = UnionClause()
+            search_clause = DisjunctiveClause()
             for attribute, value in search_values.items():
-                search_clause.add_clause(property=attribute, argument=value, method=Comparison.REGEX)
+                search_clause.add_atomic_clause(property=attribute, argument=value, method=Comparison.REGEX)
 
         query.add(search_clause)
 
