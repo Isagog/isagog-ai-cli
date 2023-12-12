@@ -316,6 +316,20 @@ class RelationInstance(Assertion):
     def is_empty(self) -> bool:
         return len(self.values) == 0
 
+    def kind_map(self) -> dict:
+        """
+        Returns a map of individuals by kind
+        :return: a map of kind : individuals
+        """
+        kind_map = {}
+        for individual in self.values:
+            for kind in individual.kinds:
+                if kind not in kind_map:
+                    kind_map[kind] = []
+                kind_map[kind].append(individual)
+        return kind_map
+
+
 
 VOID_RELATION = RelationInstance(predicate='http://isagog.com/relation#void')
 
