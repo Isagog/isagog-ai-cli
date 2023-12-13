@@ -385,6 +385,9 @@ class ConjunctiveClause(CompositeClause):
             case "v1.0.0":
                 pass
 
+        if self.optional:
+            out['optional'] = True
+
         return out
 
     def from_dict(self, data: dict, **kwargs):
