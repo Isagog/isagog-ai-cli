@@ -86,7 +86,7 @@ ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.Datatyp
 
 class Entity(Identified):
     """
-    Any identified knowledge entity, either predicative or individual
+    Any identified knowledge entity, either predicative (property) or individual
     """
 
     def __init__(self, _id: ID, **kwargs):
@@ -99,11 +99,15 @@ class Entity(Identified):
 
 class Concept(Entity):
     """
-    Concept
-    isagog_api/openapi/isagog_kg.openapi.yaml
+    Unary predicate
     """
 
     def __init__(self, _id: ID, **kwargs):
+        """
+
+        :param _id: the concept identifier
+        :param kwargs:
+        """
         super().__init__(_id, **kwargs)
         self.__owl__ = OWL.Class
         self.comment = kwargs.get('comment', "")
