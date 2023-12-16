@@ -49,13 +49,19 @@ ID = URIRef | str
   Identifier type
 """
 
+ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.Class]
 
-class Identified:
-    """Base class for all uri identified objects in the knowledge base"""
 
-    def __init__(self, _id: ID):
+class Entity(object):
+    """
+    Any identified knowledge entity, either predicative (property) or individual
+    """
+
+    def __init__(self, _id: ID, **kwargs):
         assert _id
         self.id = str(_id).strip("<>") if isinstance(_id, URIRef) else _id
+        owl_type = kwargs.get('owl')
+        self.__owl__ = owl_type if owl_type and owl_type in ALLOWED_TYPES else None
 
     def n3(self) -> str:
         """Convert to n3"""
@@ -63,7 +69,7 @@ class Identified:
 
     def __eq__(self, other):
         return (
-                (isinstance(other, Identified) and self.id == other.id)
+                (isinstance(other, Entity) and self.id == other.id)
                 or (isinstance(other, URIRef) and self.id == str(other).strip("<>"))
                 or (isinstance(other, str) and str(self.id) == other)
         )
@@ -71,30 +77,17 @@ class Identified:
     def __hash__(self):
         return self.id.__hash__()
 
+    def to_dict(self) -> dict:
+        return _todict(self)
 
-class Annotation(Identified):
+
+class Annotation(Entity):
     """
     References to owl:AnnotationProperty
     """
 
-    def __init__(self, _id: URIRef | str):
-        Identified.__init__(self, _id)
-
-
-ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.Class]
-
-
-class Entity(Identified):
-    """
-    Any identified knowledge entity, either predicative (property) or individual
-    """
-
-    def __init__(self, _id: ID, **kwargs):
-        super().__init__(_id)
-        self.__owl__ = None
-
-    def to_dict(self) -> dict:
-        return _todict(self)
+    def __init__(self, _id: ID):
+        super().__init__(self, _id=_id)
 
 
 class Concept(Entity):
@@ -108,8 +101,8 @@ class Concept(Entity):
         :param _id: the concept identifier
         :param kwargs:
         """
+        kwargs['owl'] = OWL.Class
         super().__init__(_id, **kwargs)
-        self.__owl__ = OWL.Class
         self.comment = kwargs.get('comment', "")
         self.ontology = kwargs.get('ontology', "")
         self.parents = kwargs.get('parents', [OWL.Thing])
@@ -117,33 +110,43 @@ class Concept(Entity):
 
 class Attribute(Entity):
     """
-    References to owl:DatatypeProperty
+    Assertions ranging on concrete domains
+    owl:DatatypeProperties
     """
 
-    def __init__(self, _id: ID, domain: Optional[Concept] = None):
-        super().__init__(_id)
-        self.__owl__ = OWL.DatatypeProperty
-        self.domain = domain if domain else Concept(OWL.Thing)
+    def __init__(self, _id: ID,  **kwargs):
+        """
+
+        :param _id:
+        :param kwargs: domain
+        """
+        kwargs['owl'] = OWL.DatatypeProperty
+        super().__init__(_id, **kwargs)
+        self.domain = kwargs.get('domain', OWL.Thing)
 
 
 class Relation(Entity):
     """
-    Refs to owl:ObjectProperty
+    Assertions ranging on individuals
+    owl:ObjectProperty
     """
 
     def __init__(
             self,
             _id: ID,
-            inverse: Optional[URIRef] = None,
-            label: str = None,
-            domain: Optional[Concept] = None,
-            range: Optional[Concept] = None,
+            **kwargs
     ):
-        super().__init__(_id)
-        self.inverse = inverse
-        self.domain = domain if domain is not None else Concept(OWL.Thing)
-        self.range = range if range is not None else Concept(OWL.Thing)
-        self.label = label if label is not None else _uri_label(_id)
+        """
+
+        :param _id:
+        :param kwargs: inverse, domain, range, label
+        """
+        kwargs['owl'] = OWL.ObjectProperty
+        super().__init__(_id, **kwargs)
+        self.inverse = kwargs.get('inverse')
+        self.domain = kwargs.get('domain', Concept(OWL.Thing))
+        self.range = kwargs.get('range', Concept(OWL.Thing))
+        self.label = kwargs.get('label', _uri_label(_id))
 
 
 class Assertion(object):
@@ -332,7 +335,6 @@ class RelationInstance(Assertion):
                     kind_map[kind] = []
                 kind_map[kind].append(individual)
         return kind_map
-
 
 
 VOID_RELATION = RelationInstance(predicate='http://isagog.com/relation#void')
