@@ -266,8 +266,10 @@ class AttributeInstance(Assertion):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(predicate=kwargs.get('property', kwargs.get('id', KeyError("missing attribute property"))),
-                         values=kwargs.get('values', []))
+        predicate = kwargs.get('property', kwargs.get('id', KeyError("missing relation property")))
+        values = kwargs.get('values', [])
+        super().__init__(predicate=predicate,
+                         values=values)
         self.value_type = kwargs.get('type', "string")
 
     def all_values_as_string(self) -> str:
@@ -302,8 +304,19 @@ class RelationInstance(Assertion):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(predicate=kwargs.get('property', kwargs.get('id', KeyError("missing relation property"))),
-                         values=[Individual(_id=r_data.get('id'), **r_data) for r_data in kwargs.get('values', [])])
+        predicate = kwargs.get('property', kwargs.get('id', KeyError("missing relation property")))
+        values = kwargs.get('values', [])
+        if values:
+            specimen = values[0]
+            if isinstance(specimen, Individual):
+                pass
+            elif isinstance(specimen,dict):
+                inst_values = [Individual(_id=r_data.get('id'), **r_data) for r_data in values]
+                values = inst_values
+            else:
+                raise ValueError("bad values for relation instance")
+        super().__init__(predicate=predicate,
+                         values=values)
 
     def all_values(self, only_id=True) -> list:
         if only_id:

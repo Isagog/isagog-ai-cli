@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "isagog-ai"
-version = "0.5.1"
-description = ""
+version = "0.5.2"
+description = "client for isagog ai services"
 authors = ["Guido Vetere <g.vetere@isagog.com>"]
 readme = "README.md"
 packages = [{include = "isagog"},
@@ -13,7 +13,8 @@ packages = [{include = "isagog"},
 [tool.poetry.dependencies]
 python = "^3.10"
 rdflib = "^7.0.0"
-requests = "^2.31.0"
+requests = "^2.28.2"
+urllib3 = "^2.0.6"
 toml = "^0.10.2"
 pytest = "^7.4.3"
 
