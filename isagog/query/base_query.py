@@ -1,8 +1,19 @@
 import random
 import re
+from enum import Enum
 from typing import Protocol
 
 from rdflib import URIRef
+
+
+class Comparison(Enum):
+    EXACT = "exact_match"
+    KEYWORD = "keyword_search"
+    REGEX = "regex"
+    SIMILARITY = "similarity"
+    GREATER = "greater_than"
+    LESSER = "lesser_than"
+    ANY = "any"
 
 
 class Identifier(URIRef):
@@ -81,6 +92,7 @@ class Value(str):
 
 class Query(object):
     pass
+
 
 class Clause(object):
 

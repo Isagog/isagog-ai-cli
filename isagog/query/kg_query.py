@@ -2,26 +2,10 @@
 KG Query module
 """
 import logging
-import random
-import re
-from enum import Enum
-from io import StringIO
-from typing import Protocol
 
 from rdflib import RDF, RDFS, OWL, URIRef
 
-from isagog.query.query import Clause, Value, Identifier, Variable, Query, Generator
-
-
-class Comparison(Enum):
-    EXACT = "exact_match"
-    KEYWORD = "keyword_search"
-    REGEX = "regex"
-    SIMILARITY = "similarity"
-    GREATER = "greater_than"
-    LESSER = "lesser_than"
-    ANY = "any"
-
+from isagog.query.base_query import Clause, Value, Identifier, Variable, Query, Generator, Comparison
 
 RDF_TYPE = Identifier(RDF.type)
 RDFS_LABEL = Identifier(RDFS.label)
@@ -328,7 +312,6 @@ class DisjunctiveClause(CompositeClause):
     A list of atomic clauses on the same subject, which are evaluated in 'or'
     """
 
-
     def __init__(self,
                  subject: Identifier | Variable = None,
                  clauses: list[AtomicClause] = None
@@ -466,7 +449,6 @@ class UnarySelectQuery(SelectQuery):
     Select query about a single subject
 
     """
-
 
     @staticmethod
     def _new_id(id_obj) -> Variable | Identifier:
