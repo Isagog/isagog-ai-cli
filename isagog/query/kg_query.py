@@ -6,82 +6,11 @@ import random
 import re
 from enum import Enum
 from io import StringIO
+from typing import Protocol
 
 from rdflib import RDF, RDFS, OWL, URIRef
 
-
-class Identifier(URIRef):
-    """
-    Must be an uri string, possibly prefixed
-
-    """
-
-    @staticmethod
-    def is_valid_id(id_string):
-        try:
-            if id_string.startswith('?'):
-                return False
-            URIRef(id_string)
-            return True
-        except Exception:
-            return False
-
-    def __new__(cls, value: str | URIRef):
-        return super().__new__(cls, value)
-
-
-class Variable(str):
-    """
-    Can be an uri or a variable name
-    """
-
-    @staticmethod
-    def is_valid_variable_value(var_string):
-        try:
-            Variable(var_string)
-            return True
-        except ValueError:
-            return False
-
-    @staticmethod
-    def is_valid_variable_id(var_string):
-        return var_string.startswith('?')
-
-    def __new__(cls, value=None):
-
-        if not value:
-            value = random.randint(0, 1000000)  # assume that conflicts are negligible
-        if not (isinstance(value, str) or isinstance(value, int)):
-            raise ValueError(f"Bad variable type {value}")
-        if isinstance(value, int):
-            return super().__new__(cls, f'?{hex(value)}')
-
-        if value.startswith("?"):
-            pattern = r'^[a-zA-Z0-9_?]+$'
-            if re.match(pattern, value):
-                return super().__new__(cls, value)
-            else:
-                raise ValueError(f"Bad variable name {value}")
-
-        pattern = r'^[a-zA-Z0-9_]+$'
-        if re.match(pattern, value):
-            return super().__new__(cls, "?" + value)
-        else:
-            raise ValueError(f"Bad variable name {value}")
-
-
-class Value(str):
-    """
-    Can be a string or a number
-    """
-
-    def __init__(self, value):
-        if isinstance(value, str) and ((value.startswith("<") and value.endswith(">")) or value.startswith("?")):
-            raise ValueError(f"Bad value string {value}")
-        self.value = value
-
-    def __str__(self) -> str:
-        return str(self.value)
+from isagog.query.query import Clause, Value, Identifier, Variable, Query, Generator
 
 
 class Comparison(Enum):
@@ -101,26 +30,13 @@ DEFAULT_PREFIXES = [("rdf", "http://www.w3.org/2000/01/rdf-schema"),
                     ("rdfs", "http://www.w3.org/2001/XMLSchema"),
                     ("text", "http://jena.apache.org/text")]
 
+_SUBJVAR = '_subj'
+_KINDVAR = '_kind'
+_SCOREVAR = '_score'
 
-class Clause(object):
-
-    def __init__(self,
-                 subject: Identifier | Variable | str = None,
-                 optional=False):
-        self.subject = subject
-        self.optional = optional
-
-    def to_sparql(self) -> str:
-        pass
-
-    def to_dict(self, version: str = "latest") -> dict:
-        pass
-
-    def is_defined(self) -> bool:
-        return self.subject is not None
-
-    def from_dict(self, data: dict, **kwargs):
-        pass
+"""
+  Support deprecated methods
+"""
 
 
 #  def from_dict(self, subject: Variable | Identifier, data: dict, version: str = "latest"):
@@ -189,37 +105,41 @@ class AtomicClause(Clause):
         """
         Generates the sparql triple clause
         """
-        if not self.is_defined():
-            raise ValueError(f"Clause not defined {self.subject} {self.property} {self.argument}")
+        from isagog.query.sparql_generator import _SPARQLGEN
 
-        clause = ""
-
-        match Comparison(self.method):
-            case Comparison.EXACT | Comparison.ANY:
-                clause += self.n3()  # f"{self.subject} {self.property} {self.argument}"
-            case Comparison.REGEX:
-                tmp_var = Variable()  # self._temp_var()
-                clause = f"{self.subject} {self.property.n3()} {tmp_var}\n"
-                clause += f'\n\t\tFILTER  regex({tmp_var}, "{self.argument}", "i")'
-            case Comparison.KEYWORD:
-                clause += f'({self.subject} ?score) text:query "{self.argument}"'
-            case Comparison.GREATER:
-                var = self.variable if self.variable else Variable()
-                clause += f"{self.subject} {self.property.n3()} {var}\n"
-                clause += f'\t\tFILTER ({var} > "{self.argument}")'
-            case Comparison.LESSER:
-                var = self.variable if self.variable else Variable()
-                clause += f'{self.subject} {self.property.n3()} {var}\n'
-                clause += f'FILTER ({var} < "{self.argument}")'
-            case _:
-                raise ValueError(self.method)
-
-        if self.optional:
-            clause = f"OPTIONAL {{ {clause} }}\n"
-        else:
-            clause += " .\n"
-
-        return clause
+        return _SPARQLGEN.generate_clause(self)
+        # if not self.is_defined():
+        #     raise ValueError(f"Clause not defined {self.subject} {self.property} {self.argument}")
+        #
+        # clause = ""
+        #
+        # match Comparison(self.method):
+        #     case Comparison.EXACT | Comparison.ANY:
+        #         clause += self.n3()  # f"{self.subject} {self.property} {self.argument}"
+        #     case Comparison.REGEX:
+        #         tmp_var = Variable()  # self._temp_var()
+        #         clause = f"{self.subject} {self.property.n3()} {tmp_var}\n"
+        #         clause += f'\n\t\tFILTER  regex({tmp_var}, "{self.argument}", "i")'
+        #     case Comparison.KEYWORD:
+        #         clause += f'({self.subject} ?{_SCOREVAR}) text:query "{self.argument}"'
+        #     case Comparison.GREATER:
+        #         var = self.variable if self.variable else Variable()
+        #         clause += f"{self.subject} {self.property.n3()} {var}\n"
+        #         clause += f'\t\tFILTER ({var} > "{self.argument}")'
+        #     case Comparison.LESSER:
+        #         var = self.variable if self.variable else Variable()
+        #         clause += f'{self.subject} {self.property.n3()} {var}\n'
+        #         clause += f'FILTER ({var} < "{self.argument}")'
+        #     case Comparison.SIMILARITY:
+        #         pass
+        #     case _:
+        #         raise ValueError(self.method)
+        # if self.optional:
+        #     clause = f"OPTIONAL {{ {clause} }}\n"
+        # else:
+        #     clause += " .\n"
+        #
+        # return clause
 
     def to_dict(self, version: str = "latest") -> dict:
         out = {
@@ -256,11 +176,11 @@ class AtomicClause(Clause):
         version = kwargs.get('version', 'latest')
 
         if subject == "query.subject":
-            subject = Variable("i")
+            subject = Variable(_SUBJVAR)
         elif subject and not (
                 isinstance(subject, Variable)
                 or isinstance(subject, Identifier)
-                ):
+        ):
             if Identifier.is_valid_id(str(subject)):
                 subject = Identifier(str(subject))
             elif Variable.is_valid_variable_value(str(subject)):
@@ -289,7 +209,7 @@ class AtomicClause(Clause):
                             raise ValueError(f"Invalid subject value {val}")
                 case 'variable':
                     if val == "query.subject":
-                        self.variable = Variable("i")  # the query subject
+                        self.variable = Variable(_SUBJVAR)  # the query subject
                     else:
                         self.variable = Variable(val)
                     if self.argument is None:
@@ -359,20 +279,21 @@ class ConjunctiveClause(CompositeClause):
                          optional=optional)
 
     def to_sparql(self) -> str:
-
-        strio = StringIO()
-        if len(self.clauses) > 1:
-            if self.optional:
-                strio.write("OPTIONAL")
-            strio.write("\t{\n")
-            for clause in self.clauses[1:]:
-                strio.write("\t\t\t" + clause.to_sparql())
-            strio.write("\t\t}\n")
-            # strio.write("\t}\n")
-        else:
-            strio.write("\t\t\t" + self.clauses[0].to_sparql())
-
-        return strio.getvalue()
+        from isagog.query.sparql_generator import _SPARQLGEN
+        return _SPARQLGEN.generate_clause(self)
+        # strio = StringIO()
+        # if len(self.clauses) > 1:
+        #     if self.optional:
+        #         strio.write("OPTIONAL")
+        #     strio.write("\t{\n")
+        #     for clause in self.clauses[1:]:
+        #         strio.write("\t\t\t" + clause.to_sparql())
+        #     strio.write("\t\t}\n")
+        #     # strio.write("\t}\n")
+        # else:
+        #     strio.write("\t\t\t" + self.clauses[0].to_sparql())
+        #
+        # return strio.getvalue()
 
     def to_dict(self, version: str = "latest") -> dict:
         out = {
@@ -407,6 +328,7 @@ class DisjunctiveClause(CompositeClause):
     A list of atomic clauses on the same subject, which are evaluated in 'or'
     """
 
+
     def __init__(self,
                  subject: Identifier | Variable = None,
                  clauses: list[AtomicClause] = None
@@ -424,25 +346,27 @@ class DisjunctiveClause(CompositeClause):
         return all(clause.subject == subject for clause in clauses)
 
     def to_sparql(self) -> str:
-        assert self.clauses
-        strio = StringIO()
-        if len(self.clauses) > 1:
-            strio.write("\t{\n")
-
-            strio.write("\t\t{\n")
-            strio.write("\t\t\t" + self.clauses[0].to_sparql())
-            strio.write("\t\t}\n")
-
-            strio.write("\tUNION {\n")
-            for constraint in self.clauses[1:]:
-                strio.write("\t\t\t" + constraint.to_sparql())
-            strio.write("\t\t}\n")
-            strio.write("\t}\n")
-        else:
-            strio.write("\tUNION {\n")
-            strio.write("\t\t\t" + self.clauses[0].to_sparql())
-            strio.write("\t}\n")
-        return strio.getvalue()
+        from isagog.query.sparql_generator import _SPARQLGEN
+        return _SPARQLGEN.generate_clause(self)
+        # assert self.clauses
+        # strio = StringIO()
+        # if len(self.clauses) > 1:
+        #     strio.write("\t{\n")
+        #
+        #     strio.write("\t\t{\n")
+        #     strio.write("\t\t\t" + self.clauses[0].to_sparql())
+        #     strio.write("\t\t}\n")
+        #
+        #     strio.write("\tUNION {\n")
+        #     for constraint in self.clauses[1:]:
+        #         strio.write("\t\t\t" + constraint.to_sparql())
+        #     strio.write("\t\t}\n")
+        #     strio.write("\t}\n")
+        # else:
+        #     strio.write("\tUNION {\n")
+        #     strio.write("\t\t\t" + self.clauses[0].to_sparql())
+        #     strio.write("\t}\n")
+        # return strio.getvalue()
 
     def to_dict(self, version: str = "latest") -> dict:
         out = {
@@ -467,7 +391,7 @@ class DisjunctiveClause(CompositeClause):
             self.clauses.append(atom)
 
 
-class SelectQuery(object):
+class SelectQuery(Query):
     """
     A selection query
     """
@@ -523,7 +447,15 @@ class SelectQuery(object):
         return len(self.project_vars()) > 0
 
     def to_sparql(self) -> str:
-        pass
+        """
+        This method is deprecated and will be removed in a future version.
+
+        Use generate_query with a SPARQL generator instead.
+        """
+        raise NotImplementedError()
+
+    def generate(self, generator: Generator) -> str:
+        return generator.generate_query(self)
 
     def to_dict(self, version: str = None) -> dict:
         pass
@@ -532,8 +464,9 @@ class SelectQuery(object):
 class UnarySelectQuery(SelectQuery):
     """
     Select query about a single subject
-    By convention, the first variable is the subject, others are subject's attributes and relations
+
     """
+
 
     @staticmethod
     def _new_id(id_obj) -> Variable | Identifier:
@@ -547,7 +480,7 @@ class UnarySelectQuery(SelectQuery):
                 return Identifier(id_obj)
 
     def __init__(self,
-                 subject=None,
+                 subject: Variable | Identifier = None,
                  kinds: list[str] = None,
                  prefixes: dict = None,
                  clauses: list[Clause] = None,
@@ -558,7 +491,13 @@ class UnarySelectQuery(SelectQuery):
                  ):
         """
         Buils a unary selection query
+        @param subject: the query subject, defaults to an inner variable
+        @param kinds: the subject's kinds
         @param clauses: a list of selection clauses
+        @param graph: the graph name, defaults to 'defaultGraph'
+        @param limit: the result limit, defaults to -1 (no limits
+        @param lang: the result language, defaults to 'en'
+        @param min_score: the minimum result score, defaults to no none
         """
         super().__init__(
             prefixes=prefixes,
@@ -572,12 +511,12 @@ class UnarySelectQuery(SelectQuery):
         if subject:
             self.subject = self._new_id(subject)
         else:
-            self.subject = Variable("i")
+            self.subject = Variable(_SUBJVAR)
 
         if kinds:
             self.add(AtomicClause(subject=self.subject,
                                   property=RDF_TYPE,
-                                  argument=Variable("k"),
+                                  argument=Variable(_KINDVAR),
                                   project=True))
             self.add_kinds(kinds)
 
@@ -650,43 +589,51 @@ class UnarySelectQuery(SelectQuery):
             raise ValueError(f"Malformed query due to: {e}")
 
     def to_sparql(self) -> str:
+        """
+        Deprecated
+        :return:
 
-        strio = StringIO()
-        for (name, uri) in self.prefixes:
-            strio.write(f"PREFIX {name}: <{uri}#>\n")
+        """
+        from isagog.query.sparql_generator import _SPARQLGEN
 
-        strio.write("SELECT distinct ")  # {self.subject}")
-        for rv in self.project_vars():
-            strio.write(f" {rv} ")
-        if self.is_scored():
-            strio.write(f" ?score ")
-        strio.write(" WHERE {\n")
-        if self.has_disjunctive_clauses():
-            strio.write("\t{\n")
-            for clause in self.atom_clauses():
-                strio.write("\t\t" + clause.to_sparql())
-            for clause in self.conjunctive_clauses():
-                strio.write("\t\t" + clause.to_sparql())
+        return _SPARQLGEN.generate_query(self)
 
-            strio.write("\t}\n")
-
-            for clause in self.disjunctive_clauses():
-                strio.write(clause.to_sparql())
-            # strio.write("\t}\n")
-        else:
-            for clause in self.clauses:
-                strio.write("\t" + clause.to_sparql())
-
-        if self.min_score:
-            strio.write(f'\tFILTER (?score >= {self.min_score})\n')
-
-        strio.write("}\n")
-        if self.is_scored():
-            strio.write("ORDER BY DESC(?score)\n")
-        if self.limit > 0:
-            strio.write(f"LIMIT {self.limit}\n")
-
-        return strio.getvalue()
+        # strio = StringIO()
+        # for (name, uri) in self.prefixes:
+        #     strio.write(f"PREFIX {name}: <{uri}#>\n")
+        #
+        # strio.write("SELECT distinct ")  # {self.subject}")
+        # for rv in self.project_vars():
+        #     strio.write(f" {rv} ")
+        # if self.is_scored():
+        #     strio.write(f" ?{_SCOREVAR} ")
+        # strio.write(" WHERE {\n")
+        # if self.has_disjunctive_clauses():
+        #     strio.write("\t{\n")
+        #     for clause in self.atom_clauses():
+        #         strio.write("\t\t" + clause.to_sparql())
+        #     for clause in self.conjunctive_clauses():
+        #         strio.write("\t\t" + clause.to_sparql())
+        #
+        #     strio.write("\t}\n")
+        #
+        #     for clause in self.disjunctive_clauses():
+        #         strio.write(clause.to_sparql())
+        #     # strio.write("\t}\n")
+        # else:
+        #     for clause in self.clauses:
+        #         strio.write("\t" + clause.to_sparql())
+        #
+        # if self.min_score:
+        #     strio.write(f'\tFILTER (?{_SCOREVAR} >= {self.min_score})\n')
+        #
+        # strio.write("}\n")
+        # if self.is_scored():
+        #     strio.write(f"ORDER BY DESC(?{_SCOREVAR})\n")
+        # if self.limit > 0:
+        #     strio.write(f"LIMIT {self.limit}\n")
+        #
+        # return strio.getvalue()
 
     def to_dict(self, version="latest") -> dict:
 
