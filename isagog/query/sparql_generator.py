@@ -1,8 +1,8 @@
 from io import StringIO
 
-from isagog.query.kg_query import UnarySelectQuery, AtomicClause, Comparison, Variable, \
+from isagog.model.kg_query import UnarySelectQuery, AtomicClause, Comparison, Variable, \
     ConjunctiveClause, DisjunctiveClause, _SCOREVAR
-from isagog.query.base_query import Generator, Clause, Query
+from isagog.model.base_query import Generator, Clause, Query
 
 
 class SPARQLGenerator(Generator):

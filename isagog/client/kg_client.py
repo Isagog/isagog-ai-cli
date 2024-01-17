@@ -7,7 +7,7 @@ from typing import Type, TypeVar
 
 import requests
 
-from isagog.query.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
+from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
 from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, ID
 
 log = logging.getLogger("isagog-cli")

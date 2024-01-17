@@ -5,7 +5,7 @@ import logging
 
 from rdflib import RDF, RDFS, OWL, URIRef
 
-from isagog.query.base_query import Clause, Value, Identifier, Variable, Query, Generator, Comparison
+from isagog.model.base_query import Clause, Value, Identifier, Variable, Query, Generator, Comparison
 
 RDF_TYPE = Identifier(RDF.type)
 RDFS_LABEL = Identifier(RDFS.label)
