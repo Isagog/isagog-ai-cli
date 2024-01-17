@@ -89,7 +89,7 @@ class AtomicClause(Clause):
         """
         Generates the sparql triple clause
         """
-        from isagog.query.sparql_generator import _SPARQLGEN
+        from isagog.generator.sparql_generator import _SPARQLGEN
 
         return _SPARQLGEN.generate_clause(self)
         # if not self.is_defined():
@@ -263,7 +263,7 @@ class ConjunctiveClause(CompositeClause):
                          optional=optional)
 
     def to_sparql(self) -> str:
-        from isagog.query.sparql_generator import _SPARQLGEN
+        from isagog.generator.sparql_generator import _SPARQLGEN
         return _SPARQLGEN.generate_clause(self)
         # strio = StringIO()
         # if len(self.clauses) > 1:
@@ -329,7 +329,7 @@ class DisjunctiveClause(CompositeClause):
         return all(clause.subject == subject for clause in clauses)
 
     def to_sparql(self) -> str:
-        from isagog.query.sparql_generator import _SPARQLGEN
+        from isagog.generator.sparql_generator import _SPARQLGEN
         return _SPARQLGEN.generate_clause(self)
         # assert self.clauses
         # strio = StringIO()
@@ -576,7 +576,7 @@ class UnarySelectQuery(SelectQuery):
         :return:
 
         """
-        from isagog.query.sparql_generator import _SPARQLGEN
+        from isagog.generator.sparql_generator import _SPARQLGEN
 
         return _SPARQLGEN.generate_query(self)
 
