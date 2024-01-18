@@ -90,10 +90,6 @@ class Value(str):
         return str(self.value)
 
 
-class Query(object):
-    pass
-
-
 class Clause(object):
 
     def __init__(self,
@@ -109,13 +105,25 @@ class Clause(object):
         """
         pass
 
-    def to_dict(self, version: str = "latest") -> dict:
+    def to_dict(self, **kwargs) -> dict:
         pass
 
     def is_defined(self) -> bool:
         return self.subject is not None
 
     def from_dict(self, data: dict, **kwargs):
+        pass
+
+
+class Query(object):
+
+    def add(self, clause: Clause | list = None, **kwargs):
+        """
+        Add one or more clauses to the query
+        :param clause: one or more clauses
+        :param kwargs: @AtomicClause parameters, and / or options
+        :return:
+        """
         pass
 
 

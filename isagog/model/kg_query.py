@@ -125,7 +125,7 @@ class AtomicClause(Clause):
         #
         # return clause
 
-    def to_dict(self, version: str = "latest") -> dict:
+    def to_dict(self, **kwargs) -> dict:
         out = {
             'property': self.property,
             'method': self.method.value,
@@ -144,7 +144,7 @@ class AtomicClause(Clause):
         if self.variable:
             out['variable'] = self.variable
 
-        match version:
+        match kwargs.get('version', 'latest'):
             case 'latest':
                 out['type'] = "atomic"
             case "v1.0.0":
@@ -279,12 +279,12 @@ class ConjunctiveClause(CompositeClause):
         #
         # return strio.getvalue()
 
-    def to_dict(self, version: str = "latest") -> dict:
+    def to_dict(self, **kwargs) -> dict:
         out = {
             'clauses': [c.to_dict() for c in self.clauses]
         }
 
-        match version:
+        match kwargs.get('version', 'latest'):
             case "latest":
                 out['type'] = "conjunction"
             case "v1.0.0":
@@ -351,13 +351,13 @@ class DisjunctiveClause(CompositeClause):
         #     strio.write("\t}\n")
         # return strio.getvalue()
 
-    def to_dict(self, version: str = "latest") -> dict:
+    def to_dict(self, **kwargs) -> dict:
         out = {
             'subject': self.subject,
             'clauses': [c.to_dict() for c in self.clauses]
         }
 
-        match version:
+        match kwargs.get('version', "latest"):
             case "latest":
                 out['type'] = "union"
             case "v1.0.0":
@@ -404,11 +404,34 @@ class SelectQuery(Query):
         self.lang = lang
         self.min_score = min_score
 
-    def add(self, clause: Clause):
-        if isinstance(clause, AtomicClause) and clause.method == Comparison.KEYWORD:
+    def add(self, clause: Clause | list[Clause] = None, **kwargs) -> Query:
+        assert (clause or kwargs)
+        if clause is None:
+            match kwargs.get('type', 'atomic'):
+                case 'atomic':
+                    clause_obj = AtomicClause()
+                case 'union':
+                    clause_obj = DisjunctiveClause()
+                case 'conjunction':
+                    clause_obj = ConjunctiveClause()
+                case _:
+                    raise ValueError('unknown clause type')
+            clause_obj.from_dict(kwargs)
+            clause = clause_obj
+        if isinstance(clause, list):
+            match kwargs.get('type', 'conjunction'):
+                case 'conjunction':
+                    list_clause = ConjunctiveClause(clause, optional= kwargs.get('optional', False))
+                case 'union':
+                    list_clause = DisjunctiveClause(subject=kwargs.get('subject'), clauses=clause)
+                case _ :
+                    raise ValueError('unknown list clause type')
+            return self.add(list_clause)
+        elif isinstance(clause, AtomicClause) and clause.method == Comparison.KEYWORD:
             self.clauses.insert(0, clause)
         else:
             self.clauses.append(clause)
+        return self
 
     def project_clauses(self) -> list[AtomicClause]:
         return [c for c in self.clauses if isinstance(c, AtomicClause) and c.project]
@@ -502,10 +525,14 @@ class UnarySelectQuery(SelectQuery):
                                   project=True))
             self.add_kinds(kinds)
 
-    def add(self, clause: Clause):
-        if clause.subject is None:
+    def add(self, clause: Clause | list = None, **kwargs) -> Query:
+        if isinstance(clause, list):
+            return super(clause, **kwargs)
+        if clause and clause.subject is None:
             clause.subject = self.subject
-        super().add(clause)
+        if kwargs and 'subject' not in kwargs:
+            kwargs['subject'] = self.subject
+        return super().add(clause, **kwargs)
 
     def add_kinds(self, kind_refs: list[str]):
         if not kind_refs:
