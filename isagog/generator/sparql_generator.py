@@ -2,7 +2,7 @@ from io import StringIO
 
 from isagog.model.kg_query import UnarySelectQuery, AtomicClause, Comparison, Variable, \
     ConjunctiveClause, DisjunctiveClause, _SCOREVAR
-from isagog.model.base_query import Generator, Clause, Query
+from isagog.model.kg_query import Generator, Clause, Query
 
 
 class SPARQLGenerator(Generator):
