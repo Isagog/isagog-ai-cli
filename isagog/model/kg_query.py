@@ -92,38 +92,6 @@ class AtomicClause(Clause):
         from isagog.generator.sparql_generator import _SPARQLGEN
 
         return _SPARQLGEN.generate_clause(self)
-        # if not self.is_defined():
-        #     raise ValueError(f"Clause not defined {self.subject} {self.property} {self.argument}")
-        #
-        # clause = ""
-        #
-        # match Comparison(self.method):
-        #     case Comparison.EXACT | Comparison.ANY:
-        #         clause += self.n3()  # f"{self.subject} {self.property} {self.argument}"
-        #     case Comparison.REGEX:
-        #         tmp_var = Variable()  # self._temp_var()
-        #         clause = f"{self.subject} {self.property.n3()} {tmp_var}\n"
-        #         clause += f'\n\t\tFILTER  regex({tmp_var}, "{self.argument}", "i")'
-        #     case Comparison.KEYWORD:
-        #         clause += f'({self.subject} ?{_SCOREVAR}) text:query "{self.argument}"'
-        #     case Comparison.GREATER:
-        #         var = self.variable if self.variable else Variable()
-        #         clause += f"{self.subject} {self.property.n3()} {var}\n"
-        #         clause += f'\t\tFILTER ({var} > "{self.argument}")'
-        #     case Comparison.LESSER:
-        #         var = self.variable if self.variable else Variable()
-        #         clause += f'{self.subject} {self.property.n3()} {var}\n'
-        #         clause += f'FILTER ({var} < "{self.argument}")'
-        #     case Comparison.SIMILARITY:
-        #         pass
-        #     case _:
-        #         raise ValueError(self.method)
-        # if self.optional:
-        #     clause = f"OPTIONAL {{ {clause} }}\n"
-        # else:
-        #     clause += " .\n"
-        #
-        # return clause
 
     def to_dict(self, **kwargs) -> dict:
         out = {
