@@ -151,7 +151,7 @@ class KnowledgeBase(object):
             for attribute, value in search_values.items():
                 search_clause.add_atomic_clause(property=attribute, argument=value, method=Comparison.REGEX)
 
-        query.add(search_clause)
+        query.clause(search_clause)
 
         res = requests.post(
             url=self.route,
