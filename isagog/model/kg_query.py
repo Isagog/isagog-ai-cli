@@ -14,9 +14,10 @@ DEFAULT_PREFIXES = [("rdf", "http://www.w3.org/2000/01/rdf-schema"),
                     ("rdfs", "http://www.w3.org/2001/XMLSchema"),
                     ("text", "http://jena.apache.org/text")]
 
-_SUBJVAR = '_subj'
-_KINDVAR = '_kind'
-_SCOREVAR = '_score'
+# don't change this for the sake of back compatibility
+_SUBJVAR = 'i'
+_KINDVAR = 'k'
+_SCOREVAR = 'score'
 
 """
   Support deprecated methods
@@ -337,12 +338,12 @@ class CompositeClause(Clause):
 
         self.clauses = clauses
 
-    def add_atomic_clause(self,
-                          property: Identifier,
-                          argument: Value | Variable | Identifier,
-                          method=Comparison.EXACT,
-                          project=False,
-                          optional=False):
+    def add_atom(self,
+                 property: Identifier,
+                 argument: Value | Variable | Identifier,
+                 method=Comparison.EXACT,
+                 project=False,
+                 optional=False):
         self.clauses.append(AtomicClause(subject=self.subject,
                                          property=property,
                                          argument=argument,
@@ -623,7 +624,7 @@ class UnarySelectQuery(SelectQuery):
         if len(kind_refs) > 1:
             kind_union = DisjunctiveClause(subject=self.subject)
             for kind in kind_refs[1:]:
-                kind_union.add_atomic_clause(property=RDF_TYPE, argument=Identifier(kind), method=Comparison.EXACT)
+                kind_union.add_atom(property=RDF_TYPE, argument=Identifier(kind), method=Comparison.EXACT)
             self.clause(kind_union)
 
     def add_match_clause(self, predicate, argument, method=Comparison.EXACT, project=False, optional=False):
@@ -682,42 +683,6 @@ class UnarySelectQuery(SelectQuery):
 
         return _SPARQLGEN.generate_query(self)
 
-        # strio = StringIO()
-        # for (name, uri) in self.prefixes:
-        #     strio.write(f"PREFIX {name}: <{uri}#>\n")
-        #
-        # strio.write("SELECT distinct ")  # {self.subject}")
-        # for rv in self.project_vars():
-        #     strio.write(f" {rv} ")
-        # if self.is_scored():
-        #     strio.write(f" ?{_SCOREVAR} ")
-        # strio.write(" WHERE {\n")
-        # if self.has_disjunctive_clauses():
-        #     strio.write("\t{\n")
-        #     for clause in self.atom_clauses():
-        #         strio.write("\t\t" + clause.to_sparql())
-        #     for clause in self.conjunctive_clauses():
-        #         strio.write("\t\t" + clause.to_sparql())
-        #
-        #     strio.write("\t}\n")
-        #
-        #     for clause in self.disjunctive_clauses():
-        #         strio.write(clause.to_sparql())
-        #     # strio.write("\t}\n")
-        # else:
-        #     for clause in self.clauses:
-        #         strio.write("\t" + clause.to_sparql())
-        #
-        # if self.min_score:
-        #     strio.write(f'\tFILTER (?{_SCOREVAR} >= {self.min_score})\n')
-        #
-        # strio.write("}\n")
-        # if self.is_scored():
-        #     strio.write(f"ORDER BY DESC(?{_SCOREVAR})\n")
-        # if self.limit > 0:
-        #     strio.write(f"LIMIT {self.limit}\n")
-        #
-        # return strio.getvalue()
 
     def to_dict(self, version="latest") -> dict:
 

@@ -149,7 +149,7 @@ class KnowledgeBase(object):
         else:
             search_clause = DisjunctiveClause()
             for attribute, value in search_values.items():
-                search_clause.add_atomic_clause(property=attribute, argument=value, method=Comparison.REGEX)
+                search_clause.add_atom(property=attribute, argument=value, method=Comparison.REGEX)
 
         query.clause(search_clause)
 
