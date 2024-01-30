@@ -1,6 +1,7 @@
 """
 KG Query module
 """
+from __future__ import annotations
 import logging
 import random
 import re
@@ -8,7 +9,6 @@ from enum import Enum
 from typing import Protocol
 
 from rdflib import RDF, RDFS, OWL, URIRef
-
 
 DEFAULT_PREFIXES = [("rdf", "http://www.w3.org/2000/01/rdf-schema"),
                     ("rdfs", "http://www.w3.org/2001/XMLSchema"),
@@ -34,7 +34,7 @@ class Comparison(Enum):
     ANY = "any"
 
 
-class Identifier(URIRef):
+class Identifier(object):
     """
     Must be an uri string, possibly prefixed
 
@@ -50,13 +50,21 @@ class Identifier(URIRef):
         except Exception:
             return False
 
-    def __new__(cls, value: str | URIRef):
-        return super().__new__(cls, value)
+    def __init__(self, _id: str | URIRef):
+        # Check if the id is already a URIRef instance
+        if not Identifier.is_valid_id(_id):
+            raise TypeError(f"{_id} is not a valid id")
+
+        self.id = str(_id)
+
+    def n3(self):
+        return URIRef(self.id).n3()
 
 
 RDF_TYPE = Identifier(RDF.type)
 RDFS_LABEL = Identifier(RDFS.label)
 OWL_CLASS = Identifier(OWL.Class)
+
 
 class Variable(str):
     """
@@ -103,7 +111,7 @@ class Value(str):
     Can be a string or a number
     """
 
-    def __init__(self, value):
+    def __init__(self, value: str | int | float):
         if isinstance(value, str) and ((value.startswith("<") and value.endswith(">")) or value.startswith("?")):
             raise ValueError(f"Bad value string {value}")
         self.value = value
@@ -137,25 +145,13 @@ class Clause(object):
         pass
 
 
-class Query(object):
-
-    def clause(self, clause: Clause | list = None, **kwargs):
-        """
-        Add one or more clauses to the query
-        :param clause: one or more clauses
-        :param kwargs: @AtomicClause parameters, and / or options
-        :return:
-        """
-        pass
-
-
 class Generator(Protocol):
 
     def __init__(self, language: str, version: str = None):
         self.language = language
         self.version = version
 
-    def generate_query(self, query: Query, **kwargs) -> str:
+    def generate_query(self, query: SelectQuery, **kwargs) -> str:
         pass
 
     def generate_clause(self, clause: Clause, **kwargs) -> str:
@@ -194,10 +190,10 @@ class AtomicClause(Clause):
         return f"{subj} {pred} {val}"
 
     def __init__(self,
-                 subject: Identifier | Variable = None,
-                 property: Identifier = None,  # no property variable allowed
+                 subject: Identifier | Variable | str = None,
+                 property: Identifier | str = None,  # no property variable allowed
                  argument: Value | Identifier | Variable = None,
-                 variable: Variable = None,
+                 variable: Variable | str = None,
                  method: Comparison = Comparison.ANY,
                  project=True,
                  optional=False):
@@ -211,14 +207,19 @@ class AtomicClause(Clause):
         self.subject = subject
         if self.subject and isinstance(subject, str):
             self.subject = Variable(subject) if subject.startswith("?") else Identifier(subject)
-        self.property = property
+        self.property = property if property and isinstance(property, Identifier) \
+            else Identifier(property) if property \
+            else None
         self.argument = self._instantiate_argument(argument) if argument else variable if variable else None
-        self.variable = variable  # else argument  # argument's variable
+        self.variable = variable if isinstance(variable, Variable) else Variable(
+            variable)  # else argument  # argument's variable
         self.method = method
         self.project = project
 
     def is_defined(self) -> bool:
-        return self.subject and self.property and (self.argument or self.variable)
+        return (self.subject is not None
+                and self.property is not None
+                and (self.argument is not None or self.variable is not None))
 
     def to_sparql(self) -> str:
         """
@@ -450,7 +451,7 @@ class DisjunctiveClause(CompositeClause):
             self.clauses.append(atom)
 
 
-class SelectQuery(Query):
+class SelectQuery(object):
     """
     A selection query
     """
@@ -480,33 +481,31 @@ class SelectQuery(Query):
         self.lang = lang
         self.min_score = min_score
 
-    def clause(self, clause: Clause | list[Clause] = None, **kwargs) -> Query:
-        assert (clause or kwargs)
-        if clause is None:
-            match kwargs.get('type', 'atomic'):
-                case 'atomic':
-                    clause_obj = AtomicClause()
-                case 'union':
-                    clause_obj = DisjunctiveClause()
-                case 'conjunction':
-                    clause_obj = ConjunctiveClause()
-                case _:
-                    raise ValueError('unknown clause type')
-            clause_obj.from_dict(kwargs)
-            clause = clause_obj
-        if isinstance(clause, list):
+    def add(self, clauses: Clause | list[Clause], **kwargs):
+        if isinstance(clauses, list):
             match kwargs.get('type', 'conjunction'):
                 case 'conjunction':
-                    list_clause = ConjunctiveClause(clause, optional=kwargs.get('optional', False))
+                    list_clause = ConjunctiveClause(clauses, optional=kwargs.get('optional', False))
                 case 'union':
-                    list_clause = DisjunctiveClause(subject=kwargs.get('subject'), clauses=clause)
-                case _ :
+                    list_clause = DisjunctiveClause(subject=kwargs.get('subject'), clauses=clauses)
+                case _:
                     raise ValueError('unknown list clause type')
-            return self.clause(list_clause)
-        elif isinstance(clause, AtomicClause) and clause.method == Comparison.KEYWORD:
-            self.clauses.insert(0, clause)
+            self.clauses.append(list_clause)
+        elif isinstance(clauses, AtomicClause) and clauses.method == Comparison.KEYWORD:
+            self.clauses.insert(0, clauses)
         else:
-            self.clauses.append(clause)
+            self.clauses.append(clauses)
+
+    def clause(self, property: Identifier | str, **kwargs) -> SelectQuery:
+        """
+        Contruct and adds an atomic clause
+        :param property:
+        :param kwargs:
+        :return:
+        """
+        clause_obj = AtomicClause(property=property)
+        clause_obj.from_dict(kwargs)
+        self.add(clause_obj)
         return self
 
     def project_clauses(self) -> list[AtomicClause]:
@@ -563,7 +562,7 @@ class UnarySelectQuery(SelectQuery):
     def __init__(self,
                  subject: Variable | Identifier = None,
                  kinds: list[str] = None,
-                 prefixes: dict = None,
+                 prefixes: list[(str, str)] = None,
                  clauses: list[Clause] = None,
                  graph="defaultGraph",
                  limit=-1,
@@ -595,43 +594,46 @@ class UnarySelectQuery(SelectQuery):
             self.subject = Variable(_SUBJVAR)
 
         if kinds:
-            self.clause(AtomicClause(subject=self.subject,
-                                     property=RDF_TYPE,
-                                     argument=Variable(_KINDVAR),
-                                     project=True))
+            self.add(AtomicClause(subject=self.subject,
+                                  property=RDF_TYPE,
+                                  argument=Variable(_KINDVAR),
+                                  project=True))
             self.add_kinds(kinds)
 
-    def clause(self, clause: Clause | list = None, **kwargs) -> Query:
-        if isinstance(clause, list):
-            return super(clause, **kwargs)
-        if clause and clause.subject is None:
-            clause.subject = self.subject
+    def add(self, clauses: Clause | list[Clause], **kwargs):
+        if isinstance(clauses, Clause):
+            if clauses.subject is None:
+                clauses.subject = self.subject
+        super().add(clauses, **kwargs)
+
+    def clause(self, property: Identifier | str, **kwargs) -> SelectQuery:
         if kwargs and 'subject' not in kwargs:
             kwargs['subject'] = self.subject
-        return super().clause(clause, **kwargs)
+        return super().clause(property, **kwargs)
 
     def add_kinds(self, kind_refs: list[str]):
         if not kind_refs:
             return
 
-        self.clause(AtomicClause(subject=self.subject,
-                                 property=RDF_TYPE,
-                                 argument=Identifier(kind_refs[0]),
-                                 method=Comparison.EXACT,
-                                 project=False,
-                                 optional=False))
+        self.add(AtomicClause(subject=self.subject,
+                              property=RDF_TYPE,
+                              argument=Identifier(kind_refs[0]),
+                              method=Comparison.EXACT,
+                              project=False,
+                              optional=False))
 
         if len(kind_refs) > 1:
             kind_union = DisjunctiveClause(subject=self.subject)
             for kind in kind_refs[1:]:
                 kind_union.add_atom(property=RDF_TYPE, argument=Identifier(kind), method=Comparison.EXACT)
-            self.clause(kind_union)
+            self.add(kind_union)
 
     def add_match_clause(self, predicate, argument, method=Comparison.EXACT, project=False, optional=False):
-        self.clause(AtomicClause(property=predicate, argument=argument, method=method, project=project, optional=optional))
+        self.add(
+            AtomicClause(property=predicate, argument=argument, method=method, project=project, optional=optional))
 
     def add_fetch_clause(self, predicate):
-        self.clause(AtomicClause(property=predicate, method=Comparison.ANY, project=True, optional=True))
+        self.add(AtomicClause(property=predicate, method=Comparison.ANY, project=True, optional=True))
 
     def from_dict(self, data: dict):
         """
@@ -657,7 +659,7 @@ class UnarySelectQuery(SelectQuery):
                                     raise ValueError(f"Clause type unknown")
                             subject = clause_data.get('subject', self.subject)
                             clause.from_dict(data=clause_data, subject=subject)
-                            self.clause(clause)
+                            self.add(clause)
                     case 'graph':
                         self.graph = str(val)
                     case 'limit':
@@ -683,17 +685,12 @@ class UnarySelectQuery(SelectQuery):
 
         return _SPARQLGEN.generate_query(self)
 
-
     def to_dict(self, version="latest") -> dict:
 
         out = {}
         if version == "latest" or version > "v1.0.0":
             out['subject'] = self.subject
 
-        # kinds = self.get_kinds()
-        # if len(kinds) > 0:
-        #     out["kinds"] = kinds
-        # out["clauses"] = [c.to_dict(version) for c in self.property_clauses()]
         out['clauses'] = [c.to_dict(version=version) for c in self.clauses]
         out['graph'] = self.graph
         out['limit'] = self.limit
@@ -738,5 +735,5 @@ class UnarySelectQuery(SelectQuery):
     def atom_property_clauses(self) -> list[AtomicClause]:
         return [c for c in self.atom_clauses() if c.property != RDF_TYPE]
 
-    def property_clauses(self):
-        return self.atom_property_clauses() + self.disjunctive_clauses()
+    # def property_clauses(self):
+    #     return self.atom_property_clauses() + self.disjunctive_clauses()

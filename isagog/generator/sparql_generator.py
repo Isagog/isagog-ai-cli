@@ -1,8 +1,8 @@
 from io import StringIO
 
 from isagog.model.kg_query import UnarySelectQuery, AtomicClause, Comparison, Variable, \
-    ConjunctiveClause, DisjunctiveClause, _SCOREVAR
-from isagog.model.kg_query import Generator, Clause, Query
+    ConjunctiveClause, DisjunctiveClause, _SCOREVAR, SelectQuery
+from isagog.model.kg_query import Generator, Clause
 
 
 class SPARQLGenerator(Generator):
@@ -85,11 +85,9 @@ class SPARQLGenerator(Generator):
     def __init__(self):
         super().__init__("SPARQL")
 
-    def generate_query(self, query: Query, **kwargs) -> str:
+    def generate_query(self, query: SelectQuery, **kwargs) -> str:
 
-        if isinstance(query, UnarySelectQuery):
-            pass
-        else:
+        if not isinstance(query, UnarySelectQuery):
             raise TypeError("Can only generate_query from UnarySelectQuery")
 
         strio = StringIO()
