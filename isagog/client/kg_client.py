@@ -1,7 +1,7 @@
 """
 Interface to Isagog KG service
 """
-
+import json
 import logging
 from typing import Type, TypeVar
 

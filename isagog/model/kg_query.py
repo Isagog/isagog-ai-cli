@@ -34,7 +34,7 @@ class Comparison(Enum):
     ANY = "any"
 
 
-class Identifier(object):
+class Identifier(str):
     """
     Must be an uri string, possibly prefixed
 
@@ -50,18 +50,14 @@ class Identifier(object):
         except Exception:
             return False
 
-    def __init__(self, _id: str | URIRef):
-        # Check if the id is already a URIRef instance
-        if not Identifier.is_valid_id(_id):
-            raise TypeError(f"{_id} is not a valid id")
-
-        self.id = str(_id)
+    def __new__(cls, _id: str | URIRef):
+        # Handle URIRef or string input
+        if isinstance(_id, URIRef):
+            value = str(_id)
+        return super(Identifier, cls).__new__(cls, _id)
 
     def n3(self):
-        return URIRef(self.id).n3()
-
-    def __str__(self):
-        return self.id
+        return URIRef(self).n3()
 
 
 RDF_TYPE = Identifier(RDF.type)
@@ -718,7 +714,7 @@ class UnarySelectQuery(SelectQuery):
         return len(self.conjunctive_clauses()) > 0
 
     @classmethod
-    def new(cls, rdata: dict) -> SelectQuery:
+    def new(cls, rdata: dict) -> UnarySelectQuery:
         q = UnarySelectQuery()
         q.from_dict(rdata)
         return q
