@@ -60,6 +60,9 @@ class Identifier(object):
     def n3(self):
         return URIRef(self.id).n3()
 
+    def __str__(self):
+        return self.id
+
 
 RDF_TYPE = Identifier(RDF.type)
 RDFS_LABEL = Identifier(RDFS.label)
