@@ -165,7 +165,7 @@ class AtomicClause(Clause):
             return arg
         elif isinstance(arg, URIRef):
             return Identifier(arg)
-        elif isinstance(arg, int) or isinstance(arg, float):
+        elif isinstance(arg, int) or isinstance(arg, float) or isinstance(arg, str):
             return Value(arg)
         else:
             arg = str(arg)
@@ -191,7 +191,7 @@ class AtomicClause(Clause):
     def __init__(self,
                  subject: Identifier | Variable | str = None,
                  property: Identifier | str = None,  # no property variable allowed
-                 argument: Value | Identifier | Variable = None,
+                 argument: str | int | float | Value | Identifier | Variable = None,
                  variable: Variable | str = None,
                  method: Comparison = Comparison.ANY,
                  project=True,
@@ -498,12 +498,11 @@ class SelectQuery(object):
     def clause(self,
                property: Identifier | str,
                subject: Identifier | Variable | str = None,
-               argument: Value | Identifier | Variable = None,
+               argument: str | int | float | Value | Identifier | Variable = None,
                variable: Variable | str = None,
                method: Comparison = Comparison.ANY,
                project=True,
-               optional=False,
-               **kwargs) -> SelectQuery:
+               optional=False) -> SelectQuery:
         """
         Constructs and adds an atomic
         :param property:
@@ -628,12 +627,11 @@ class UnarySelectQuery(SelectQuery):
     def clause(self,
                property: Identifier | str,
                subject: Identifier | Variable | str = None,
-               argument: Value | Identifier | Variable = None,
+               argument: str | int | float | Value | Identifier | Variable = None,
                variable: Variable | str = None,
                method: Comparison = Comparison.ANY,
                project=True,
-               optional=False,
-               **kwargs) -> SelectQuery:
+               optional=False) -> SelectQuery:
         if subject is None:
             subject = self.subject
         return super().clause(property=property,
@@ -642,8 +640,7 @@ class UnarySelectQuery(SelectQuery):
                               variable=variable,
                               method=method,
                               project=project,
-                              optional=optional,
-                              **kwargs)
+                              optional=optional)
 
     def add_kinds(self, kind_refs: list[str]):
         if not kind_refs:
