@@ -200,6 +200,8 @@ class AtomicClause(Clause):
         A select clause
 
         """
+        if not (argument or variable):
+            raise ValueError("no arguments or variable")
 
         super().__init__(subject=subject, optional=optional)
 
@@ -209,7 +211,7 @@ class AtomicClause(Clause):
         self.property = property if property and isinstance(property, Identifier) \
             else Identifier(property) if property \
             else None
-        self.argument = self._instantiate_argument(argument) if argument else variable if variable else None
+        self.argument = self._instantiate_argument(argument) if argument else None # else variable if variable
         self.variable = variable if isinstance(variable, Variable) else Variable(
             variable)  # else argument  # argument's variable
         self.method = method
@@ -536,7 +538,9 @@ class SelectQuery(object):
         _vars = []
         for c in self.clauses:
             if isinstance(c, AtomicClause) and c.project:
-                if isinstance(c.argument, Variable):
+                if c.variable and not c.argument:
+                    _vars.append(c.variable)
+                elif isinstance(c.argument, Variable):
                     _vars.append(c.argument)
                 if isinstance(c.subject, Variable):
                     _vars.append(c.subject)
