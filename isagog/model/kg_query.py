@@ -176,6 +176,14 @@ class AtomicClause(Clause):
             else:
                 return Value(arg)
 
+
+    @staticmethod
+    def _instantiate_variable(variable) -> Variable:
+        if isinstance(variable, Variable):
+            return variable
+        else:
+            return Variable(variable)
+
     def n3(self) -> str:
         subj = self.subject.n3() if isinstance(self.subject, Identifier) else self.subject
         pred = self.property.n3() if isinstance(self.property, Identifier) else f"<{self.property}>"
@@ -211,9 +219,8 @@ class AtomicClause(Clause):
         self.property = property if property and isinstance(property, Identifier) \
             else Identifier(property) if property \
             else None
-        self.argument = self._instantiate_argument(argument) if argument else None # else variable if variable
-        self.variable = variable if isinstance(variable, Variable) else Variable(
-            variable)  # else argument  # argument's variable
+        self.argument = self._instantiate_argument(argument) if argument else None
+        self.variable = self._instantiate_variable(variable) if variable else None
         self.method = method
         self.project = project
 
@@ -320,6 +327,7 @@ class AtomicClause(Clause):
                     self.optional = bool(val)
                 case _:
                     raise ValueError(f"Invalid clause key {key}")
+
 
 
 class CompositeClause(Clause):
