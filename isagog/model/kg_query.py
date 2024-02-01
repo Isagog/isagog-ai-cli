@@ -495,16 +495,36 @@ class SelectQuery(object):
         else:
             self.clauses.append(clauses)
 
-    def clause(self, property: Identifier | str, **kwargs) -> SelectQuery:
+    def clause(self,
+               property: Identifier | str,
+               subject: Identifier | Variable | str = None,
+               argument: Value | Identifier | Variable = None,
+               variable: Variable | str = None,
+               method: Comparison = Comparison.ANY,
+               project=True,
+               optional=False,
+               **kwargs) -> SelectQuery:
         """
-        Contruct and adds an atomic clause
+        Constructs and adds an atomic
         :param property:
+        :param subject:
+        :param argument:
+        :param variable:
+        :param method:
+        :param project:
+        :param optional:
         :param kwargs:
         :return:
         """
-        clause_obj = AtomicClause(property=property)
-        clause_obj.from_dict(kwargs)
-        self.add(clause_obj)
+        atomic_clause = AtomicClause(property=property,
+                                     subject=subject,
+                                     argument=argument,
+                                     variable=variable,
+                                     method=method,
+                                     project=project,
+                                     optional=optional)
+        # clause_obj.from_dict(kwargs)
+        self.add(atomic_clause)
         return self
 
     def project_clauses(self) -> list[AtomicClause]:
@@ -605,10 +625,25 @@ class UnarySelectQuery(SelectQuery):
                 clauses.subject = self.subject
         super().add(clauses, **kwargs)
 
-    def clause(self, property: Identifier | str, **kwargs) -> SelectQuery:
-        if kwargs and 'subject' not in kwargs:
-            kwargs['subject'] = self.subject
-        return super().clause(property, **kwargs)
+    def clause(self,
+               property: Identifier | str,
+               subject: Identifier | Variable | str = None,
+               argument: Value | Identifier | Variable = None,
+               variable: Variable | str = None,
+               method: Comparison = Comparison.ANY,
+               project=True,
+               optional=False,
+               **kwargs) -> SelectQuery:
+        if subject is None:
+            subject = self.subject
+        return super().clause(property=property,
+                              subject=subject,
+                              argument=argument,
+                              variable=variable,
+                              method=method,
+                              project=project,
+                              optional=optional,
+                              **kwargs)
 
     def add_kinds(self, kind_refs: list[str]):
         if not kind_refs:
