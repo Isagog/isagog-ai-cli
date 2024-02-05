@@ -208,8 +208,6 @@ class AtomicClause(Clause):
         A select clause
 
         """
-        if not (argument or variable):
-            raise ValueError("no arguments or variable")
 
         super().__init__(subject=subject, optional=optional)
 
