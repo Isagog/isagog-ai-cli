@@ -1,12 +1,26 @@
 import logging
+import sys
 
 import requests
-import toml
+from dotenv import load_dotenv
 import os
 
 from isagog.model.nlp_model import Word, NamedEntity
 
+load_dotenv()
+
 log = logging.getLogger("isagog-cli")
+
+log.setLevel(os.getenv("ISAGOG_AI_LOG_LEVEL", logging.INFO))
+
+handler = logging.StreamHandler(sys.stdout)
+
+# Create a formatter and set the format for the handler
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+# Add the handler to the logger
+log.addHandler(handler)
 
 DEFAULT_LEXICAL_POS = ["NOUN", "VERB", "ADJ", "ADV"]
 DEFAULT_SEARCH_POS = ["NOUN", "VERB", "PROPN"]
@@ -22,6 +36,7 @@ class LanguageProcessor(object):
                  version: str = None):
         self.route = route
         self.version = version
+        log.debug("LanguageProcessor initialized with route %s", route)
 
     def similarity_ranking(self, target: str,
                            candidates: list[str]) -> list[(int, float)]:
@@ -32,6 +47,7 @@ class LanguageProcessor(object):
         :param candidates:
         :return:
         """
+        log.debug("Ranking for %s", target)
         req = {
             "target": target,
             "candidates": candidates,
@@ -56,6 +72,7 @@ class LanguageProcessor(object):
         :param number:
         :return:
         """
+        log.debug("Extracting %d keywords from %s", number, text)
         res = requests.post(
             url=self.route + "/analyze",
             json={
@@ -81,7 +98,7 @@ class LanguageProcessor(object):
         :param filter_pos: part of speech list
         :return:
         """
-
+        log.debug("Extracting words from %s", text)
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
 
@@ -103,7 +120,7 @@ class LanguageProcessor(object):
             return []
 
     def extract_words_entities(self, text: str, filter_pos=None) -> (list[Word], list[NamedEntity]):
-
+        log.debug("Extracting words and entities from %s", text)
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
 

@@ -1,16 +1,32 @@
 """
 Interface to Isagog KG service
 """
-import json
 import logging
+import os
+import sys
+import time
 from typing import Type, TypeVar
 
 import requests
 
 from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
 from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, ID
+from dotenv import load_dotenv
 
 log = logging.getLogger("isagog-cli")
+
+handler = logging.StreamHandler(sys.stdout)
+
+# Create a formatter and set the format for the handler
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+# Add the handler to the logger
+log.addHandler(handler)
+
+load_dotenv()
+
+log.setLevel(os.getenv("ISAGOG_AI_LOG_LEVEL", logging.INFO))
 
 E = TypeVar('E', bound='Entity')
 
@@ -37,6 +53,7 @@ class KnowledgeBase(object):
         self.dataset = dataset
         self.ontology = ontology
         self.version = version
+        log.debug("KnowledgeBase initialized with route %s, on dataset %d", route, dataset)
 
     def get_entity(self,
                    _id: str,
@@ -54,6 +71,8 @@ class KnowledgeBase(object):
         """
 
         assert _id
+
+        log.debug("Fetching %s", _id)
 
         if not issubclass(entity_type, Entity):
             raise ValueError(f"{entity_type} not an Entity")
@@ -91,6 +110,8 @@ class KnowledgeBase(object):
         :return: a list of dictionaries { property: values }
         """
         assert (subject and properties)
+
+        log.debug("Querying assertions for %s", subject.id)
 
         query = UnarySelectQuery(subject=subject)
 
@@ -139,6 +160,7 @@ class KnowledgeBase(object):
         :return:
         """
         assert (kinds or (search_values and len(search_values) > 0))
+        log.debug("Searching individuals")
         entities = []
         query = UnarySelectQuery()
         if kinds:
@@ -179,6 +201,7 @@ class KnowledgeBase(object):
         :param timeout:
         :return:
         """
+        start_time = time.time()
 
         req = query.to_dict(self.version)
 
@@ -193,10 +216,13 @@ class KnowledgeBase(object):
         )
 
         if res.ok:
+            log.debug("Query individuals successful in %d seconds", time.time() - start_time)
             return [kind(r.get('id'), **r) for r in res.json()]
+        elif res.status_code < 500:
+            log.warning("query individuals return code %d, reason %s", res.status_code, res.reason)
         else:
-            log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
-            return []
+            log.error("query individuals return code code %d, reason %s", res.status_code, res.reason)
+        return []
 
     def upsert_individual(self, individual: Individual, auth_token=None) -> bool:
         """
@@ -206,7 +232,7 @@ class KnowledgeBase(object):
         :param auth_token:
         :return:
         """
-
+        log.debug("Updating individual %s", individual.id)
         params = {
             'id': individual.id
         }
