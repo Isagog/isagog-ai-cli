@@ -1,31 +1,18 @@
 import logging
-import sys
 
 import requests
 from dotenv import load_dotenv
-import os
 
 from isagog.model.nlp_model import Word, NamedEntity
 
 load_dotenv()
 
-log = logging.getLogger("isagog-cli")
-
-log.setLevel(os.getenv("ISAGOG_AI_LOG_LEVEL", logging.INFO))
-
-handler = logging.StreamHandler(sys.stdout)
-
-# Create a formatter and set the format for the handler
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-
-# Add the handler to the logger
-log.addHandler(handler)
 
 DEFAULT_LEXICAL_POS = ["NOUN", "VERB", "ADJ", "ADV"]
 DEFAULT_SEARCH_POS = ["NOUN", "VERB", "PROPN"]
 
-def truncate(s: str, n = 10):
+
+def truncate(s: str, n=10):
     """
     Truncate a string to the first N characters, adding '...' if the string is longer.
 
@@ -47,10 +34,12 @@ class LanguageProcessor(object):
 
     def __init__(self,
                  route: str,
-                 version: str = None):
+                 version: str = None,
+                 logger=logging.getLogger()):
         self.route = route
         self.version = version
-        log.debug("LanguageProcessor initialized with route %s", route)
+        self.logger = logger
+        self.logger.info("Isagog NLP client (%s) initialized on route %s", hex(id(self)), route)
 
     def similarity_ranking(self, target: str,
                            candidates: list[str]) -> list[(int, float)]:
@@ -61,7 +50,7 @@ class LanguageProcessor(object):
         :param candidates:
         :return:
         """
-        log.debug("Ranking for %s", target)
+        self.logger.debug("Ranking for %s", target)
         req = {
             "target": target,
             "candidates": candidates,
@@ -76,7 +65,7 @@ class LanguageProcessor(object):
         if res.ok:
             return [(rank[0], rank[1]) for rank in res.json()]
         else:
-            log.error("similarity ranking failed: code=%d, reason=%s", res.status_code, res.reason)
+            self.logger.error("similarity ranking failed: code=%d, reason=%s", res.status_code, res.reason)
             return []
 
     def extract_keywords_from(self, text: str, number=5) -> list[str]:
@@ -86,7 +75,7 @@ class LanguageProcessor(object):
         :param number:
         :return:
         """
-        log.debug("Extracting %d keywords from %s", number, truncate(text))
+        self.logger.debug("Extracting %d keywords from %s", number, truncate(text))
         res = requests.post(
             url=self.route + "/analyze",
             json={
@@ -102,7 +91,7 @@ class LanguageProcessor(object):
             words = [kwr[0] for kwr in res_dict["keyword"]]
             return words
         else:
-            log.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
+            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
             return []
 
     def extract_words(self, text: str, filter_pos=None) -> list[str]:
@@ -112,7 +101,7 @@ class LanguageProcessor(object):
         :param filter_pos: part of speech list
         :return:
         """
-        log.debug("Extracting words from %s", truncate(text))
+        self.logger.debug("Extracting words from %s", truncate(text))
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
 
@@ -130,11 +119,11 @@ class LanguageProcessor(object):
             words = [Word(**{k: v for k, v in r.items() if k in Word._fields}) for r in res_dict["words"]]
             return [w.text for w in words if w.pos in filter_pos]
         else:
-            log.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
+            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
             return []
 
     def extract_words_entities(self, text: str, filter_pos=None) -> (list[Word], list[NamedEntity]):
-        log.debug("Extracting words and entities from %s", truncate(text))
+        self.logger.debug("Extracting words and entities from %s", truncate(text))
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
 
@@ -157,5 +146,5 @@ class LanguageProcessor(object):
             return words, entities
 
         else:
-            log.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
+            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
             return [], []

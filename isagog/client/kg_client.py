@@ -2,33 +2,16 @@
 Interface to Isagog KG service
 """
 import logging
-import os
-import sys
 import time
 from typing import Type, TypeVar
 
 import requests
-
-from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
-from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, ID
 from dotenv import load_dotenv
 
+from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, ID
+from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
 
 load_dotenv()
-
-log = logging.getLogger("isagog-cli")
-
-log.setLevel(os.getenv("ISAGOG_AI_LOG_LEVEL", logging.INFO))
-
-handler = logging.StreamHandler(sys.stdout)
-# Create a formatter and set the format for the handler
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-
-# Add the handler to the logger
-log.addHandler(handler)
-
-
 
 
 E = TypeVar('E', bound='Entity')
@@ -43,7 +26,8 @@ class KnowledgeBase(object):
                  route: str,
                  ontology: Ontology = None,
                  dataset: str = None,
-                 version: str = "latest"):
+                 version: str = "latest",
+                 logger=logging.getLogger()):
         """
 
         :param route: the service's endpoint route
@@ -56,7 +40,8 @@ class KnowledgeBase(object):
         self.dataset = dataset
         self.ontology = ontology
         self.version = version
-        log.debug("KnowledgeBase initialized with route %s", route)
+        self.logger = logger
+        self.logger.info("Isagog KG client (%s) initialized on route %s", hex(id(self)), route)
 
     def get_entity(self,
                    _id: str,
@@ -75,7 +60,7 @@ class KnowledgeBase(object):
 
         assert _id
 
-        log.debug("Fetching %s", _id)
+        self.logger.debug("Fetching %s", _id)
 
         if not issubclass(entity_type, Entity):
             raise ValueError(f"{entity_type} not an Entity")
@@ -93,10 +78,10 @@ class KnowledgeBase(object):
             headers={"Accept": "application/json"},
         )
         if res.ok:
-            log.debug("Fetched %s", _id)
+            self.logger.debug("Fetched %s", _id)
             return entity_type(_id, **res.json())
         else:
-            log.error("Couldn't fetch %s due to %s", _id, res.reason)
+            self.logger.error("Couldn't fetch %s due to %s", _id, res.reason)
             return None
 
     def query_assertions(self,
@@ -114,7 +99,7 @@ class KnowledgeBase(object):
         """
         assert (subject and properties)
 
-        log.debug("Querying assertions for %s", subject.id)
+        self.logger.debug("Querying assertions for %s", subject.id)
 
         query = UnarySelectQuery(subject=subject)
 
@@ -133,7 +118,7 @@ class KnowledgeBase(object):
         if res.ok:
             res_list = res.json()
             if len(res_list) == 0:
-                log.warning("Void attribute query")
+                self.logger.warning("Void attribute query")
                 return []
             else:
                 res_attrib_list = res_list[0].get('attributes', OSError("malformed response"))
@@ -147,7 +132,7 @@ class KnowledgeBase(object):
 
                 return [Assertion(predicate=prop, values=__get_values(prop)) for prop in properties]
         else:
-            log.warning("Query of entity %s failed due to %s", subject, res.reason)
+            self.logger.warning("Query of entity %s failed due to %s", subject, res.reason)
             return []
 
     def search_individuals(self,
@@ -163,7 +148,7 @@ class KnowledgeBase(object):
         :return:
         """
         assert (kinds or (search_values and len(search_values) > 0))
-        log.debug("Searching individuals")
+        self.logger.debug("Searching individuals")
         entities = []
         query = UnarySelectQuery()
         if kinds:
@@ -188,7 +173,7 @@ class KnowledgeBase(object):
         if res.ok:
             entities.extend([Individual(r.get('id'), **r) for r in res.json()])
         else:
-            log.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
+            self.logger.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
 
         return entities
 
@@ -219,12 +204,12 @@ class KnowledgeBase(object):
         )
 
         if res.ok:
-            log.debug("Query individuals successful in %d seconds", time.time() - start_time)
+            self.logger.debug("Query individuals successful in %d seconds", time.time() - start_time)
             return [kind(r.get('id'), **r) for r in res.json()]
         elif res.status_code < 500:
-            log.warning("query individuals return code %d, reason %s", res.status_code, res.reason)
+            self.logger.warning("query individuals return code %d, reason %s", res.status_code, res.reason)
         else:
-            log.error("query individuals return code code %d, reason %s", res.status_code, res.reason)
+            self.logger.error("query individuals return code code %d, reason %s", res.status_code, res.reason)
         return []
 
     def upsert_individual(self, individual: Individual, auth_token=None) -> bool:
@@ -235,7 +220,7 @@ class KnowledgeBase(object):
         :param auth_token:
         :return:
         """
-        log.debug("Updating individual %s", individual.id)
+        self.logger.debug("Updating individual %s", individual.id)
         params = {
             'id': individual.id
         }
