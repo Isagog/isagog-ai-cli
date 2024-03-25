@@ -53,7 +53,7 @@ class KnowledgeBase(object):
         self.dataset = dataset
         self.ontology = ontology
         self.version = version
-        log.debug("KnowledgeBase initialized with route %s, on dataset %d", route, dataset)
+        log.debug("KnowledgeBase initialized with route %s", route)
 
     def get_entity(self,
                    _id: str,

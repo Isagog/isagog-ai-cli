@@ -25,6 +25,20 @@ log.addHandler(handler)
 DEFAULT_LEXICAL_POS = ["NOUN", "VERB", "ADJ", "ADV"]
 DEFAULT_SEARCH_POS = ["NOUN", "VERB", "PROPN"]
 
+def truncate(s: str, n = 10):
+    """
+    Truncate a string to the first N characters, adding '...' if the string is longer.
+
+    :param s: The string to be truncated.
+    :param n: The maximum length of the truncated string.
+    :return: The truncated string.
+    """
+    # Check if the string is longer than N characters
+    if len(s) > n:
+        return s[:n] + '...'
+    else:
+        return s
+
 
 class LanguageProcessor(object):
     """
@@ -72,7 +86,7 @@ class LanguageProcessor(object):
         :param number:
         :return:
         """
-        log.debug("Extracting %d keywords from %s", number, text)
+        log.debug("Extracting %d keywords from %s", number, truncate(text))
         res = requests.post(
             url=self.route + "/analyze",
             json={
@@ -98,7 +112,7 @@ class LanguageProcessor(object):
         :param filter_pos: part of speech list
         :return:
         """
-        log.debug("Extracting words from %s", text)
+        log.debug("Extracting words from %s", truncate(text))
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
 
@@ -120,7 +134,7 @@ class LanguageProcessor(object):
             return []
 
     def extract_words_entities(self, text: str, filter_pos=None) -> (list[Word], list[NamedEntity]):
-        log.debug("Extracting words and entities from %s", text)
+        log.debug("Extracting words and entities from %s", truncate(text))
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
 
