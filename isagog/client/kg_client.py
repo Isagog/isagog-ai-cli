@@ -13,10 +13,14 @@ from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicCla
 from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, ID
 from dotenv import load_dotenv
 
+
+load_dotenv()
+
 log = logging.getLogger("isagog-cli")
 
-handler = logging.StreamHandler(sys.stdout)
+log.setLevel(os.getenv("ISAGOG_AI_LOG_LEVEL", logging.INFO))
 
+handler = logging.StreamHandler(sys.stdout)
 # Create a formatter and set the format for the handler
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
@@ -24,9 +28,8 @@ handler.setFormatter(formatter)
 # Add the handler to the logger
 log.addHandler(handler)
 
-load_dotenv()
 
-log.setLevel(os.getenv("ISAGOG_AI_LOG_LEVEL", logging.INFO))
+
 
 E = TypeVar('E', bound='Entity')
 
