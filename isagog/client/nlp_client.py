@@ -69,7 +69,7 @@ class LanguageProcessor(object):
         )
 
         if res.ok:
-            self.logger.debug("Ranked %s in %d seconds", target, time.time() - start)
+            self.logger.debug("Ranked %s in %d seconds", truncate(target), time.time() - start)
             return [(rank[0], rank[1]) for rank in res.json()]
         else:
             self.logger.error("similarity ranking failed: code=%d, reason=%s", res.status_code, res.reason)
