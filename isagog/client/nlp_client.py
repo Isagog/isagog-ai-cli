@@ -1,4 +1,6 @@
 import logging
+import os
+import time
 
 import requests
 from dotenv import load_dotenv
@@ -7,6 +9,7 @@ from isagog.model.nlp_model import Word, NamedEntity
 
 load_dotenv()
 
+NLP_DEFAULT_TIMEOUT = os.getenv('NLP_DEFAULT_TIMEOUT', 60)
 
 DEFAULT_LEXICAL_POS = ["NOUN", "VERB", "ADJ", "ADV"]
 DEFAULT_SEARCH_POS = ["NOUN", "VERB", "PROPN"]
@@ -41,16 +44,19 @@ class LanguageProcessor(object):
         self.logger = logger
         self.logger.info("Isagog NLP client (%s) initialized on route %s", hex(id(self)), route)
 
-    def similarity_ranking(self, target: str,
-                           candidates: list[str]) -> list[(int, float)]:
+    def similarity_ranking(self,
+                           target: str,
+                           candidates: list[str],
+                           timeout=NLP_DEFAULT_TIMEOUT) -> list[(int, float)]:
 
         """
         Ranks the candidates based on their similarity with the supplied text
+        :param timeout:
         :param target:
         :param candidates:
         :return:
         """
-        self.logger.debug("Ranking for %s", target)
+        start = time.time()
         req = {
             "target": target,
             "candidates": candidates,
@@ -59,18 +65,23 @@ class LanguageProcessor(object):
         res = requests.post(
             url=self.route + "/rank",
             json=req,
-            timeout=30
+            timeout=timeout
         )
 
         if res.ok:
+            self.logger.debug("Ranked %s in %d seconds", target, time.time() - start)
             return [(rank[0], rank[1]) for rank in res.json()]
         else:
             self.logger.error("similarity ranking failed: code=%d, reason=%s", res.status_code, res.reason)
             return []
 
-    def extract_keywords_from(self, text: str, number=5) -> list[str]:
+    def extract_keywords_from(self,
+                              text: str,
+                              number=5,
+                              timeout=NLP_DEFAULT_TIMEOUT) -> list[str]:
         """
         Extract the main N words (keywords) from the supplied text
+        :param timeout:
         :param text:
         :param number:
         :return:
@@ -84,7 +95,7 @@ class LanguageProcessor(object):
                 "keyword_number": number
             },
             headers={"Accept": "application/json"},
-            timeout=20
+            timeout=timeout
         )
         if res.ok:
             res_dict = res.json()
@@ -94,9 +105,13 @@ class LanguageProcessor(object):
             self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
             return []
 
-    def extract_words(self, text: str, filter_pos=None) -> list[str]:
+    def extract_words(self,
+                      text: str,
+                      filter_pos=None,
+                      timeout=NLP_DEFAULT_TIMEOUT) -> list[str]:
         """
         Extract all the word token with the given part-of-speech
+        :param timeout:
         :param text:
         :param filter_pos: part of speech list
         :return:
@@ -112,7 +127,7 @@ class LanguageProcessor(object):
                 "tasks": ["word"]
             },
             headers={"Accept": "application/json"},
-            timeout=20
+            timeout=timeout
         )
         if res.ok:
             res_dict = res.json()
@@ -122,7 +137,17 @@ class LanguageProcessor(object):
             self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
             return []
 
-    def extract_words_entities(self, text: str, filter_pos=None) -> (list[Word], list[NamedEntity]):
+    def extract_words_entities(self,
+                               text: str,
+                               filter_pos=None,
+                               timeout=NLP_DEFAULT_TIMEOUT) -> (list[Word], list[NamedEntity]):
+        """
+        Extract words and entities from the supplied text
+        :param text:
+        :param filter_pos:
+        :param timeout:
+        :return:
+        """
         self.logger.debug("Extracting words and entities from %s", truncate(text))
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
@@ -134,7 +159,7 @@ class LanguageProcessor(object):
                 "tasks": ["word", "entity"]
             },
             headers={"Accept": "application/json"},
-            timeout=20
+            timeout=timeout
         )
 
         if res.ok:

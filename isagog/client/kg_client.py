@@ -2,6 +2,7 @@
 Interface to Isagog KG service
 """
 import logging
+import os
 import time
 from typing import Type, TypeVar
 
@@ -13,6 +14,7 @@ from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicCla
 
 load_dotenv()
 
+KG_DEFAULT_TIMEOUT = os.getenv('KG_DEFAULT_TIMEOUT', 60)
 
 E = TypeVar('E', bound='Entity')
 
@@ -87,7 +89,7 @@ class KnowledgeBase(object):
     def query_assertions(self,
                          subject: Individual,
                          properties: list[Attribute | Relation],
-                         timeout=30
+                         timeout=KG_DEFAULT_TIMEOUT
                          ) -> list[Assertion]:
         """
         Returns entity properties, if any
@@ -138,7 +140,7 @@ class KnowledgeBase(object):
     def search_individuals(self,
                            kinds: list[Concept] = None,
                            search_values: dict[Attribute, Value] = None,
-                           timeout=30
+                           timeout=KG_DEFAULT_TIMEOUT
                            ) -> list[Individual]:
         """
         Retrieves individuals by string search
@@ -180,7 +182,7 @@ class KnowledgeBase(object):
     def query_individuals(self,
                           query: UnarySelectQuery,
                           kind: Type[E] = Individual,
-                          timeout=30
+                          timeout=KG_DEFAULT_TIMEOUT
                           ) -> list[E]:
         """
 
