@@ -9,7 +9,7 @@ from isagog.model.nlp_model import Word, NamedEntity
 
 load_dotenv()
 
-NLP_DEFAULT_TIMEOUT = os.getenv('NLP_DEFAULT_TIMEOUT', 60)
+NLP_DEFAULT_TIMEOUT = int(os.getenv('NLP_DEFAULT_TIMEOUT', 60))
 
 DEFAULT_LEXICAL_POS = ["NOUN", "VERB", "ADJ", "ADV"]
 DEFAULT_SEARCH_POS = ["NOUN", "VERB", "PROPN"]

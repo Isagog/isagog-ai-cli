@@ -14,7 +14,7 @@ from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicCla
 
 load_dotenv()
 
-KG_DEFAULT_TIMEOUT = os.getenv('KG_DEFAULT_TIMEOUT', 60)
+KG_DEFAULT_TIMEOUT = int(os.getenv('KG_DEFAULT_TIMEOUT', 60))
 
 E = TypeVar('E', bound='Entity')
 
