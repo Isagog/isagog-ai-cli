@@ -235,17 +235,10 @@ class AtomicClause(Clause):
                 and self.property is not None
                 and (self.argument is not None or self.variable is not None))
 
-    # def to_sparql(self) -> str:
-    #     """
-    #     Deprecated
-    #     Generates the sparql triple clause
-    #     """
-    #     from isagog.generator.sparql_generator import _SPARQLGEN
-    #
-    #     return _SPARQLGEN.generate_clause(self)
 
     def to_dict(self, **kwargs) -> dict:
         out = {
+            'type': 'atomic',
             'property': self.property,
             'method': self.method.value,
             'project': self.project,
@@ -262,12 +255,6 @@ class AtomicClause(Clause):
                 out['identifier'] = self.argument
         if self.variable:
             out['variable'] = self.variable
-
-        match kwargs.get('version', 'latest'):
-            case 'latest':
-                out['type'] = "atomic"
-            case "v1.0.0":
-                pass
 
         return out
 
@@ -381,16 +368,17 @@ class ConjunctiveClause(CompositeClause):
         super().__init__(clauses=clauses,
                          optional=optional)
 
-    def to_sparql(self) -> str:
-        """
-        Deprecated
-        :return:
-        """
-        from isagog.generator.sparql_generator import _SPARQLGEN
-        return _SPARQLGEN.generate_clause(self)
+    # def to_sparql(self) -> str:
+    #     """
+    #     Deprecated
+    #     :return:
+    #     """
+    #     from isagog.generator.sparql_generator import _SPARQLGEN
+    #     return _SPARQLGEN.generate_clause(self)
 
     def to_dict(self, **kwargs) -> dict:
         out = {
+            'type': 'conjunction',
             'clauses': [c.to_dict() for c in self.clauses]
         }
 
@@ -444,15 +432,10 @@ class DisjunctiveClause(CompositeClause):
 
     def to_dict(self, **kwargs) -> dict:
         out = {
+            'type': 'union',
             'subject': self.subject,
             'clauses': [c.to_dict() for c in self.clauses]
         }
-
-        match kwargs.get('version', "latest"):
-            case "latest":
-                out['type'] = "union"
-            case "v1.0.0":
-                pass
 
         return out
 
@@ -561,13 +544,13 @@ class SelectQuery(object):
     def has_return_vars(self) -> bool:
         return len(self.project_vars()) > 0
 
-    def to_sparql(self) -> str:
-        """
-        This method is deprecated and will be removed in a future version.
-
-        Use generate_query with a SPARQL generator instead.
-        """
-        raise NotImplementedError()
+    # def to_sparql(self) -> str:
+    #     """
+    #     This method is deprecated and will be removed in a future version.
+    #
+    #     Use generate_query with a SPARQL generator instead.
+    #     """
+    #     raise NotImplementedError()
 
     def generate(self, generator: Generator) -> str:
         return generator.generate_query(self)
@@ -695,7 +678,7 @@ class UnarySelectQuery(SelectQuery):
                         self.add_kinds(val)
                     case 'clauses':
                         for clause_data in val:
-                            match clause_data.get('type', 'atomic'):
+                            match clause_data.get('type'):
                                 case 'atomic':
                                     clause = AtomicClause()
                                 case 'union':
@@ -703,7 +686,11 @@ class UnarySelectQuery(SelectQuery):
                                 case 'conjunction':
                                     clause = ConjunctiveClause()
                                 case _:
-                                    raise ValueError(f"Clause type unknown")
+                                    if 'clauses' in clause_data:
+                                        # if not otherwise specified, assume a conjunction
+                                        clause = ConjunctiveClause()
+                                    else:
+                                        clause = AtomicClause()
                             subject = clause_data.get('subject', self.subject)
                             clause.from_dict(data=clause_data, subject=subject)
                             self.add(clause)
@@ -722,20 +709,20 @@ class UnarySelectQuery(SelectQuery):
         except Exception as e:
             raise ValueError(f"Malformed query due to: {e}")
 
-    def to_sparql(self) -> str:
-        """
-        Deprecated
-        :return:
+    # def to_sparql(self) -> str:
+    #     """
+    #     Deprecated
+    #     :return:
+    #
+    #     """
+    #     from isagog.generator.sparql_generator import _SPARQLGEN
+    #
+    #     return _SPARQLGEN.generate_query(self)
 
-        """
-        from isagog.generator.sparql_generator import _SPARQLGEN
-
-        return _SPARQLGEN.generate_query(self)
-
-    def to_dict(self, version="latest") -> dict:
+    def to_dict(self, version=None) -> dict:
 
         out = {}
-        if version == "latest" or version > "v1.0.0":
+        if version is None or version > "1.0.0":
             out['subject'] = self.subject
 
         out['clauses'] = [c.to_dict(version=version) for c in self.clauses]

@@ -28,8 +28,8 @@ class KnowledgeBase(object):
                  route: str,
                  ontology: Ontology = None,
                  dataset: str = None,
-                 version: str = "latest",
-                 logger=logging.getLogger()):
+                 version: str = None,
+                 logger=None):
         """
 
         :param route: the service's endpoint route
@@ -41,22 +41,19 @@ class KnowledgeBase(object):
         self.route = route
         self.dataset = dataset
         self.ontology = ontology
-        self.version = version
-        self.logger = logger
+        self.version = version if version else "latest"
+        self.logger = logger if logger else logging.getLogger()
         self.logger.info("Isagog KG client (%s) initialized on route %s", hex(id(self)), route)
 
     def get_entity(self,
                    _id: str,
                    expand: bool = True,
-                   limit: int = 1024,
                    entity_type: Type[E] = Entity
                    ) -> E | None:
         """
-        Gets all individual entity data from the kg
-
+        Gets the entity by its identifier
         :param _id: the entity identifier
-        :param limit:
-        :param expand:
+        :param expand: whether to return entity attributes
         :param entity_type: the entity type (default: Entity)
         """
 
@@ -69,7 +66,7 @@ class KnowledgeBase(object):
 
         expand = "true" if expand else "false"
 
-        params = f"id={_id}&expand={expand}&limit={limit}"
+        params = f"id={_id}&expand={expand}"
 
         if self.dataset:
             params += f"&dataset={self.dataset}"
@@ -92,7 +89,7 @@ class KnowledgeBase(object):
                          timeout=KG_DEFAULT_TIMEOUT
                          ) -> list[Assertion]:
         """
-        Returns entity properties, if any
+        Returns specific entity properties
 
         :param timeout:
         :param subject:
@@ -139,28 +136,28 @@ class KnowledgeBase(object):
 
     def search_individuals(self,
                            kinds: list[Concept] = None,
-                           search_values: dict[Attribute, Value] = None,
+                           constraints: dict[Attribute, Value] = None,
                            timeout=KG_DEFAULT_TIMEOUT
                            ) -> list[Individual]:
         """
         Retrieves individuals by string search
-        :param timeout:
-        :param kinds:
-        :param search_values:
-        :return:
+        :param timeout: the request timeout
+        :param kinds: the kinds to search for
+        :param constraints: the search constraints
+        :return: a list of matching individuals
         """
-        assert (kinds or (search_values and len(search_values) > 0))
+        assert (kinds or (constraints and len(constraints) > 0))
         self.logger.debug("Searching individuals")
         entities = []
         query = UnarySelectQuery()
         if kinds:
             query.add_kinds(kinds)
-        if len(search_values) == 1:
-            attribute, value = next(iter(search_values.items()))
+        if len(constraints) == 1:
+            attribute, value = next(iter(constraints.items()))
             search_clause = AtomicClause(property=attribute, argument=value, method=Comparison.REGEX)
         else:
             search_clause = DisjunctiveClause()
-            for attribute, value in search_values.items():
+            for attribute, value in constraints.items():
                 search_clause.add_atom(property=attribute, argument=value, method=Comparison.REGEX)
 
         query.clause(search_clause)
