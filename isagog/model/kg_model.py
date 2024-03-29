@@ -1,5 +1,6 @@
 """
-KG model
+    A model for Knowledge Graph entities and relations
+    (c) Isagog S.r.l. 2024, MIT License
 """
 
 from typing import IO, TextIO, Any

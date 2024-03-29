@@ -1,5 +1,6 @@
 """
-NLP model
+    A  model for Isagog NLP data objects
+    (c) Isagog S.r.l. 2024, MIT License
 """
 from typing import NamedTuple
 

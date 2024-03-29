@@ -1,5 +1,7 @@
 """
-KG Query module
+    A model for knowledge graph queries
+    The model is based on a triple query language (subject, property, argument)
+    (c) Isagog S.r.l. 2024, MIT License
 """
 from __future__ import annotations
 import logging
@@ -18,10 +20,6 @@ DEFAULT_PREFIXES = [("rdf", "http://www.w3.org/2000/01/rdf-schema"),
 _SUBJVAR = 'i'
 _KINDVAR = 'k'
 _SCOREVAR = 'score'
-
-"""
-  Support deprecated methods
-"""
 
 
 class Comparison(Enum):
@@ -60,6 +58,7 @@ class Identifier(str):
         return URIRef(self).n3()
 
 
+# The following are predefined identifiers
 RDF_TYPE = Identifier(RDF.type)
 RDFS_LABEL = Identifier(RDFS.label)
 OWL_CLASS = Identifier(OWL.Class)
@@ -120,19 +119,14 @@ class Value(str):
 
 
 class Clause(object):
-
+    """
+    A selection clause
+    """
     def __init__(self,
                  subject: Identifier | Variable | str = None,
                  optional=False):
         self.subject = subject
         self.optional = optional
-
-    # def to_sparql(self) -> str:
-    #     """
-    #     Deprecated, use a SPARQL generator instead
-    #     :return:
-    #     """
-    #     pass
 
     def to_dict(self, **kwargs) -> dict:
         pass
@@ -234,7 +228,6 @@ class AtomicClause(Clause):
         return (self.subject is not None
                 and self.property is not None
                 and (self.argument is not None or self.variable is not None))
-
 
     def to_dict(self, **kwargs) -> dict:
         out = {

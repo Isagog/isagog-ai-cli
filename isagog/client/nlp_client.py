@@ -1,3 +1,7 @@
+"""
+Client for Isagog NLP service
+(c) Isagog S.r.l. 2024, MIT License
+"""
 import logging
 import os
 import time

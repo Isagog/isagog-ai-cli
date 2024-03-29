@@ -1,5 +1,6 @@
 """
-Interface to Isagog KG service
+Interface to the Isagog Knoledge Graph service
+(c) Isagog S.r.l. 2024, MIT License
 """
 import logging
 import os
@@ -14,8 +15,9 @@ from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicCla
 
 load_dotenv()
 
-KG_DEFAULT_TIMEOUT = int(os.getenv('KG_DEFAULT_TIMEOUT', 60))
+KG_DEFAULT_TIMEOUT = int(os.getenv('KG_DEFAULT_TIMEOUT', 120))
 
+# Type variable for the Entity hierarchy
 E = TypeVar('E', bound='Entity')
 
 

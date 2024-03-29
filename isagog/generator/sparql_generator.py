@@ -1,3 +1,7 @@
+"""
+SPARQL query generator
+(c) Isagog S.r.l. 2024, MIT License
+"""
 from io import StringIO
 
 from isagog.model.kg_query import UnarySelectQuery, AtomicClause, Comparison, Variable, \
@@ -6,6 +10,9 @@ from isagog.model.kg_query import Generator, Clause
 
 
 class SPARQLGenerator(Generator):
+    """
+    SPARQL query generator
+    """
 
     def generate_clause(self, clause: Clause, **kwargs) -> str:
 
