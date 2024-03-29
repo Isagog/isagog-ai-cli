@@ -127,12 +127,12 @@ class Clause(object):
         self.subject = subject
         self.optional = optional
 
-    def to_sparql(self) -> str:
-        """
-        Deprecated, use a SPARQL generator instead
-        :return:
-        """
-        pass
+    # def to_sparql(self) -> str:
+    #     """
+    #     Deprecated, use a SPARQL generator instead
+    #     :return:
+    #     """
+    #     pass
 
     def to_dict(self, **kwargs) -> dict:
         pass
@@ -158,6 +158,9 @@ class Generator(Protocol):
 
 
 class AtomicClause(Clause):
+    """
+    A single triple clause
+    """
 
     @staticmethod
     def _instantiate_argument(arg) -> Value | Identifier | Variable:
@@ -175,7 +178,6 @@ class AtomicClause(Clause):
                 return Identifier(arg)
             else:
                 return Value(arg)
-
 
     @staticmethod
     def _instantiate_variable(variable) -> Variable:
@@ -205,8 +207,14 @@ class AtomicClause(Clause):
                  project=True,
                  optional=False):
         """
-        A select clause
 
+        :param subject:
+        :param property:
+        :param argument:
+        :param variable:
+        :param method:
+        :param project:
+        :param optional:
         """
 
         super().__init__(subject=subject, optional=optional)
@@ -227,14 +235,14 @@ class AtomicClause(Clause):
                 and self.property is not None
                 and (self.argument is not None or self.variable is not None))
 
-    def to_sparql(self) -> str:
-        """
-        Deprecated
-        Generates the sparql triple clause
-        """
-        from isagog.generator.sparql_generator import _SPARQLGEN
-
-        return _SPARQLGEN.generate_clause(self)
+    # def to_sparql(self) -> str:
+    #     """
+    #     Deprecated
+    #     Generates the sparql triple clause
+    #     """
+    #     from isagog.generator.sparql_generator import _SPARQLGEN
+    #
+    #     return _SPARQLGEN.generate_clause(self)
 
     def to_dict(self, **kwargs) -> dict:
         out = {
@@ -325,7 +333,6 @@ class AtomicClause(Clause):
                     self.optional = bool(val)
                 case _:
                     raise ValueError(f"Invalid clause key {key}")
-
 
 
 class CompositeClause(Clause):
@@ -520,7 +527,6 @@ class SelectQuery(object):
         :param method:
         :param project:
         :param optional:
-        :param kwargs:
         :return:
         """
         atomic_clause = AtomicClause(property=property,
@@ -685,7 +691,7 @@ class UnarySelectQuery(SelectQuery):
                 match key:
                     case 'subject':
                         self.subject = self._new_id(val)
-                    case 'kinds':
+                    case 'kind' | 'kinds':  # backward compatibility w 0.7
                         self.add_kinds(val)
                     case 'clauses':
                         for clause_data in val:

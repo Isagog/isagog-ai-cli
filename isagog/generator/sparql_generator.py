@@ -103,18 +103,18 @@ class SPARQLGenerator(Generator):
         if query.has_disjunctive_clauses():
             strio.write("\t{\n")
             for clause in query.atom_clauses():
-                strio.write("\t\t" + clause.to_sparql())
+                strio.write("\t\t" + self.generate_clause(clause))  # clause.to_sparql()
             for clause in query.conjunctive_clauses():
-                strio.write("\t\t" + clause.to_sparql())
+                strio.write("\t\t" + self.generate_clause(clause))  # clause.to_sparql()
 
             strio.write("\t}\n")
 
             for clause in query.disjunctive_clauses():
-                strio.write(clause.to_sparql())
-            # strio.write("\t}\n")
+                strio.write(self.generate_clause(clause))  # clause.to_sparql()
+
         else:
             for clause in query.clauses:
-                strio.write("\t" + clause.to_sparql())
+                strio.write("\t" + self.generate_clause(clause))  # clause.to_sparql()
 
         if query.min_score:
             strio.write(f'\tFILTER (?{_SCOREVAR} >= {query.min_score})\n')
@@ -129,4 +129,3 @@ class SPARQLGenerator(Generator):
 
 
 _SPARQLGEN = SPARQLGenerator()
-

@@ -1,15 +1,24 @@
 """
 KG model
 """
-import logging
-from typing import IO, Optional, TextIO, Any
+
+from typing import IO, TextIO, Any
 
 from rdflib import OWL, Graph, RDF, URIRef, RDFS
 
-log = logging.getLogger("isagog-cli")
+# Type definitions
+
+ID = URIRef | str  # Identifier type
+
+ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.Class]
 
 
 def _uri_label(uri: str) -> str:
+    """
+    Extracts a label from a URI
+    :param uri:
+    :return:
+    """
     if "#" in uri:
         return uri.split("#")[-1]
     elif "/" in uri:
@@ -42,14 +51,6 @@ def _todict(obj, classkey=None):
         return data
     else:
         return obj
-
-
-ID = URIRef | str
-"""
-  Identifier type
-"""
-
-ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.Class]
 
 
 class Entity(object):
@@ -114,7 +115,7 @@ class Attribute(Entity):
     owl:DatatypeProperties
     """
 
-    def __init__(self, _id: ID,  **kwargs):
+    def __init__(self, _id: ID, **kwargs):
         """
 
         :param _id:
@@ -299,7 +300,7 @@ VOID_ATTRIBUTE = AttributeInstance(id='http://isagog.com/attribute#void')
 
 class RelationInstance(Assertion):
     """
-    Relation instance as defined in
+    Relational assertion, as defined in
     isagog_api/openapi/isagog_kg.openapi.yaml
     """
 
@@ -310,7 +311,7 @@ class RelationInstance(Assertion):
             specimen = values[0]
             if isinstance(specimen, Individual):
                 pass
-            elif isinstance(specimen,dict):
+            elif isinstance(specimen, dict):
                 inst_values = [Individual(_id=r_data.get('id'), **r_data) for r_data in values]
                 values = inst_values
             else:
@@ -319,6 +320,11 @@ class RelationInstance(Assertion):
                          values=values)
 
     def all_values(self, only_id=True) -> list:
+        """
+        Returns all values of the relation instance
+        :param only_id:
+        :return:
+        """
         if only_id:
             return [ind.id for ind in self.values]
         else:
@@ -343,7 +349,7 @@ class RelationInstance(Assertion):
         """
         kind_map = {}
         for individual in self.values:
-            for kind in individual.kinds:
+            for kind in individual.kind:
                 if kind not in kind_map:
                     kind_map[kind] = []
                 kind_map[kind].append(individual)
@@ -364,12 +370,13 @@ class Individual(Entity):
         super().__init__(_id, **kwargs)
         self.__owl__ = OWL.NamedIndividual
         self.label = kwargs.get('label', _uri_label(self.id))
-        self.kinds = kwargs.get('kinds', [OWL.Thing])
+        self.kind = kwargs.get('kind', kwargs.get('kinds', [OWL.Thing]))  # back compatibility w 0.7
         self.comment = kwargs.get('comment', '')
         self.attributes = [AttributeInstance(**a_data) for a_data in
                            kwargs.get('attributes', list[AttributeInstance]())]
         self.relations = [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())]
-        self.score = float(kwargs.get('score', 0.0))
+        if 'score' in kwargs:
+            self.score = float(kwargs.get('score'))
         if self.has_attribute("https://isagog.com/ontology#profile"):
             self.profile = {
                 profile_value.split("=")[0]: int(profile_value.split("=")[1])
@@ -378,22 +385,42 @@ class Individual(Entity):
         else:
             self.profile = {}
 
-    def has_attribute(self, attribute_id: str) -> bool:
+    def has_attribute(self, attribute_id: ID) -> bool:
+        """
+        Checks if the individual has a given ontology defined attribute
+        :param attribute_id:
+        :return:
+        """
         found = next(filter(lambda x: x.property == attribute_id, self.attributes), None)
         return found and not found.is_empty()
 
-    def get_attribute(self, attribute_id: str) -> AttributeInstance | Any:
+    def get_attribute(self, attribute_id: ID) -> AttributeInstance | Any:
+        """
+        Gets the ontology defined attribute instance of the individual
+        :param attribute_id:
+        :return:
+        """
         found = next(filter(lambda x: x.property == attribute_id, self.attributes), None)
         if found and not found.is_empty():
             return found
         else:
             return VOID_ATTRIBUTE
 
-    def has_relation(self, relation_id: str) -> bool:
+    def has_relation(self, relation_id: ID) -> bool:
+        """
+        Checks if the individual has a given ontology defined relation
+        :param relation_id:
+        :return:
+        """
         found = next(filter(lambda x: x.property == relation_id, self.relations), None)
         return found and not found.is_empty()
 
-    def get_relation(self, relation_id: str) -> RelationInstance | Any:
+    def get_relation(self, relation_id: ID) -> RelationInstance | Any:
+        """
+        Gets the ontology defined relation instance of the individual
+        :param relation_id:
+        :return:
+        """
         found = next(filter(lambda x: x.property == relation_id, self.relations), None)
         if found and not found.is_empty():
             return found
@@ -404,7 +431,10 @@ class Individual(Entity):
         self.score = score
 
     def get_score(self) -> float | None:
-        return self.score
+        if hasattr(self, 'score'):
+            return self.score
+        else:
+            return None
 
     def has_score(self) -> bool:
-        return self.score is not None
+        return hasattr(self, 'score')
