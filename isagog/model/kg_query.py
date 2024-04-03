@@ -210,7 +210,10 @@ class AtomicClause(Clause):
         :param project:
         :param optional:
         """
-
+        if subject and not isinstance(subject, Identifier) and not isinstance(subject, str):
+            raise ValueError("Invalid subject")
+        if property and not isinstance(property, Identifier) and not isinstance(property, str):
+            raise ValueError("Invalid property")
         super().__init__(subject=subject, optional=optional)
 
         self.subject = subject

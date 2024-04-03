@@ -2,6 +2,7 @@
 Interface to the Isagog Knoledge Graph service
 (c) Isagog S.r.l. 2024, MIT License
 """
+import json
 import logging
 import os
 import time
@@ -48,7 +49,7 @@ class KnowledgeBase(object):
         self.logger.info("Isagog KG client (%s) initialized on route %s", hex(id(self)), route)
 
     def get_entity(self,
-                   _id: str,
+                   _id: ID,
                    expand: bool = True,
                    entity_type: Type[E] = Entity
                    ) -> E | None:
@@ -100,12 +101,18 @@ class KnowledgeBase(object):
         """
         assert (subject and properties)
 
-        self.logger.debug("Querying assertions for %s", subject.id)
+        if not isinstance(subject, Individual):
+            raise ValueError(f"{subject} not an Individual")
 
-        query = UnarySelectQuery(subject=subject)
+        if not all(isinstance(prop, (Attribute, Relation)) for prop in properties):
+            raise ValueError(f"{properties} not all Attributes or Relations")
+
+        self.logger.debug("Querying assertions for %s", subject)
+
+        query = UnarySelectQuery(subject=subject.id)
 
         for prop in properties:
-            query.add_fetch_clause(predicate=str(prop))
+            query.add_fetch_clause(predicate=str(prop.id))
 
         query_dict = query.to_dict(self.version)
 
@@ -162,7 +169,7 @@ class KnowledgeBase(object):
             for attribute, value in constraints.items():
                 search_clause.add_atom(property=attribute, argument=value, method=Comparison.REGEX)
 
-        query.clause(search_clause)
+        query.add(search_clause)
 
         res = requests.post(
             url=self.route,
@@ -205,7 +212,7 @@ class KnowledgeBase(object):
         )
 
         if res.ok:
-            self.logger.debug("Query individuals successful in %d seconds", time.time() - start_time)
+            self.logger.debug("Query individuals done in %d seconds", time.time() - start_time)
             return [kind(r.get('id'), **r) for r in res.json()]
         elif res.status_code < 500:
             self.logger.warning("query individuals return code %d, reason %s", res.status_code, res.reason)
