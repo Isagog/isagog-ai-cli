@@ -162,7 +162,7 @@ class AtomicClause(Clause):
             return arg
         elif isinstance(arg, URIRef):
             return Identifier(arg)
-        elif isinstance(arg, int) or isinstance(arg, float) or isinstance(arg, str):
+        elif isinstance(arg, int) or isinstance(arg, float):
             return Value(arg)
         else:
             arg = str(arg)
