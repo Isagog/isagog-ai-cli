@@ -2,13 +2,13 @@
 Interface to the Isagog Knoledge Graph service
 (c) Isagog S.r.l. 2024, MIT License
 """
-import json
 import logging
 import os
 import time
 from typing import Type, TypeVar
 
-import requests
+# import requests
+import httpx
 from dotenv import load_dotenv
 
 from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, ID
@@ -74,16 +74,16 @@ class KnowledgeBase(object):
         if self.dataset:
             params += f"&dataset={self.dataset}"
 
-        res = requests.get(
+        res = httpx.get(
             url=self.route,
             params=params,
             headers={"Accept": "application/json"},
         )
-        if res.ok:
+        if res.status_code == 200:
             self.logger.debug("Fetched %s", _id)
             return entity_type(_id, **res.json())
         else:
-            self.logger.error("Couldn't fetch %s due to %s", _id, res.reason)
+            self.logger.error("Couldn't fetch %s due to %s", _id, res.text)
             return None
 
     def query_assertions(self,
@@ -116,14 +116,14 @@ class KnowledgeBase(object):
 
         query_dict = query.to_dict(self.version)
 
-        res = requests.post(
+        res = httpx.post(
             url=self.route,
             json=query_dict,
             headers={"Accept": "application/json"},
             timeout=timeout
         )
 
-        if res.ok:
+        if res.status_code == 200:
             res_list = res.json()
             if len(res_list) == 0:
                 self.logger.warning("Void attribute query")
@@ -140,7 +140,7 @@ class KnowledgeBase(object):
 
                 return [Assertion(predicate=prop, values=__get_values(prop)) for prop in properties]
         else:
-            self.logger.warning("Query of entity %s failed due to %s", subject, res.reason)
+            self.logger.warning("Query of entity %s failed due to %s", subject, res.text)
             return []
 
     def search_individuals(self,
@@ -171,17 +171,17 @@ class KnowledgeBase(object):
 
         query.add(search_clause)
 
-        res = requests.post(
+        res = httpx.post(
             url=self.route,
             json=query.to_dict(self.version),
             headers={"Accept": "application/json"},
             timeout=timeout
         )
 
-        if res.ok:
+        if res.status_code == 200:
             entities.extend([Individual(r.get('id'), **r) for r in res.json()])
         else:
-            self.logger.error("Search individuals failed: code %d, reason %s", res.status_code, res.reason)
+            self.logger.error("Search individuals failed: code %d, reason %s", res.status_code, res.text)
 
         return entities
 
@@ -204,20 +204,20 @@ class KnowledgeBase(object):
         if self.dataset and (self.version == "latest" or self.version > "v1.0.0"):
             req['dataset'] = self.dataset
 
-        res = requests.post(
+        res = httpx.post(
             url=self.route,
             json=req,
             headers={"Accept": "application/json"},
             timeout=timeout
         )
 
-        if res.ok:
+        if res.status_code == 200:
             self.logger.debug("Query individuals done in %d seconds", time.time() - start_time)
             return [kind(r.get('id'), **r) for r in res.json()]
         elif res.status_code < 500:
-            self.logger.warning("query individuals return code %d, reason %s", res.status_code, res.reason)
+            self.logger.warning("query individuals return code %d, reason %s", res.status_code, res.text)
         else:
-            self.logger.error("query individuals return code code %d, reason %s", res.status_code, res.reason)
+            self.logger.error("query individuals return code code %d, reason %s", res.status_code, res.text)
         return []
 
     def upsert_individual(self, individual: Individual, auth_token=None) -> bool:
@@ -243,14 +243,14 @@ class KnowledgeBase(object):
         if auth_token:
             headers["Authorization"] = f'Bearer {auth_token}'
 
-        res = requests.patch(
+        res = httpx.patch(
             url=self.route,
             params=params,
             json=req,
             headers=headers
         )
 
-        if res.ok:
+        if res.status_code == 200:
             return True
         else:
             raise OSError(f"upsert failed {res.status_code}")

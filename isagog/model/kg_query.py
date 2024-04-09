@@ -9,7 +9,7 @@ import random
 import re
 from enum import Enum
 from typing import Protocol
-
+from urllib.parse import urlparse
 from rdflib import RDF, RDFS, OWL, URIRef
 
 DEFAULT_PREFIXES = [("rdf", "http://www.w3.org/2000/01/rdf-schema"),
@@ -20,6 +20,15 @@ DEFAULT_PREFIXES = [("rdf", "http://www.w3.org/2000/01/rdf-schema"),
 _SUBJVAR = 'i'
 _KINDVAR = 'k'
 _SCOREVAR = 'score'
+
+
+def is_uri(string: str) -> bool:
+    parsed = urlparse(string)
+    return bool(parsed.scheme) and bool(parsed.netloc)
+
+
+def is_variable(string: str) -> bool:
+    return string.startswith('?')
 
 
 class Comparison(Enum):
@@ -41,7 +50,7 @@ class Identifier(str):
     @staticmethod
     def is_valid_id(id_string):
         try:
-            if id_string.startswith('?'):
+            if is_variable(id_string):
                 return False
             URIRef(id_string)
             return True
@@ -78,7 +87,7 @@ class Variable(str):
             return False
 
     @staticmethod
-    def is_valid_variable_id(var_string):
+    def is_valid_variable_id(var_string: str):
         return var_string.startswith('?')
 
     def __new__(cls, value=None):
@@ -110,7 +119,7 @@ class Value(str):
     """
 
     def __init__(self, value: str | int | float):
-        if isinstance(value, str) and ((value.startswith("<") and value.endswith(">")) or value.startswith("?")):
+        if isinstance(value, str) and (is_uri(value) or value.startswith("?")):
             raise ValueError(f"Bad value string {value}")
         self.value = value
 
@@ -122,6 +131,7 @@ class Clause(object):
     """
     A selection clause
     """
+
     def __init__(self,
                  subject: Identifier | Variable | str = None,
                  optional=False):
@@ -218,7 +228,7 @@ class AtomicClause(Clause):
 
         self.subject = subject
         if self.subject and isinstance(subject, str):
-            self.subject = Variable(subject) if subject.startswith("?") else Identifier(subject)
+            self.subject = Variable(subject) if is_variable(subject) else Identifier(subject)
         self.property = property if property and isinstance(property, Identifier) \
             else Identifier(property) if property \
             else None
