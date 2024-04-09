@@ -4,6 +4,7 @@ SPARQL query generator
 """
 from io import StringIO
 
+from isagog.model.kg_model import Assertion
 from isagog.model.kg_query import UnarySelectQuery, AtomicClause, Comparison, Variable, \
     ConjunctiveClause, DisjunctiveClause, _SCOREVAR, SelectQuery
 from isagog.model.kg_query import Generator, Clause
@@ -93,6 +94,12 @@ class SPARQLGenerator(Generator):
         super().__init__("SPARQL")
 
     def generate_query(self, query: SelectQuery, **kwargs) -> str:
+        """
+        Generates a SPARQL query from a SelectQuery
+        :param query:
+        :param kwargs:
+        :return:
+        """
 
         if not isinstance(query, UnarySelectQuery):
             raise TypeError("Can only generate_query from UnarySelectQuery")
@@ -133,6 +140,15 @@ class SPARQLGenerator(Generator):
             strio.write(f"LIMIT {query.limit}\n")
 
         return strio.getvalue()
+
+    def generate_update(self, statements: list[Assertion], **kwargs) -> str:
+        """
+        Generates a SPARQL update from a list of assertions
+        :param statements:
+        :param kwargs:
+        :return:
+        """
+        pass
 
 
 _SPARQLGEN = SPARQLGenerator()

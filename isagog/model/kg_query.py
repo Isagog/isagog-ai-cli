@@ -12,6 +12,8 @@ from typing import Protocol
 from urllib.parse import urlparse
 from rdflib import RDF, RDFS, OWL, URIRef
 
+from isagog.model.kg_model import Assertion
+
 DEFAULT_PREFIXES = [("rdf", "http://www.w3.org/2000/01/rdf-schema"),
                     ("rdfs", "http://www.w3.org/2001/XMLSchema"),
                     ("text", "http://jena.apache.org/text")]
@@ -148,6 +150,8 @@ class Clause(object):
         pass
 
 
+
+
 class Generator(Protocol):
 
     def __init__(self, language: str, version: str = None):
@@ -158,6 +162,9 @@ class Generator(Protocol):
         pass
 
     def generate_clause(self, clause: Clause, **kwargs) -> str:
+        pass
+
+    def generate_update(self, statements: list[Assertion], **kwargs) -> str:
         pass
 
 

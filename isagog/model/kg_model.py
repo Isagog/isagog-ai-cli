@@ -171,6 +171,13 @@ class Assertion(object):
         self.subject = str(subject).strip("<>") if subject else None
         self.values = values if values else []
 
+    def n3(self) -> list[str]:
+        """Convert to n3"""
+        rt = []
+        for value in self.values:
+          rt.append(f"<{self.subject}> <{self.property}> {value}")
+        return rt
+
 
 class Ontology(Graph):
     """

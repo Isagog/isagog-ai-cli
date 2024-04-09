@@ -5,8 +5,9 @@ Client for Isagog NLP service
 import logging
 import os
 import time
+import httpx
 
-import requests
+
 from dotenv import load_dotenv
 
 from isagog.model.nlp_model import Word, NamedEntity
@@ -66,17 +67,17 @@ class LanguageProcessor(object):
             "candidates": candidates,
         }
 
-        res = requests.post(
+        res = httpx.post(
             url=self.route + "/rank",
             json=req,
             timeout=timeout
         )
 
-        if res.ok:
+        if res.status_code == 200:
             self.logger.debug("Ranked %s in %d seconds", truncate(target), time.time() - start)
             return [(rank[0], rank[1]) for rank in res.json()]
         else:
-            self.logger.error("similarity ranking failed: code=%d, reason=%s", res.status_code, res.reason)
+            self.logger.error("similarity ranking failed: code=%d, reason=%s", res.status_code, res.text)
             return []
 
     def extract_keywords_from(self,
@@ -91,7 +92,7 @@ class LanguageProcessor(object):
         :return:
         """
         self.logger.debug("Extracting %d keywords from %s", number, truncate(text))
-        res = requests.post(
+        res = httpx.post(
             url=self.route + "/analyze",
             json={
                 "text": text,
@@ -101,12 +102,12 @@ class LanguageProcessor(object):
             headers={"Accept": "application/json"},
             timeout=timeout
         )
-        if res.ok:
+        if res.status_code == 200:
             res_dict = res.json()
             words = [kwr[0] for kwr in res_dict["keyword"]]
             return words
         else:
-            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
+            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.text)
             return []
 
     def extract_words(self,
@@ -124,7 +125,7 @@ class LanguageProcessor(object):
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
 
-        res = requests.post(
+        res = httpx.post(
             url=self.route + "/analyze",
             json={
                 "text": text,
@@ -133,12 +134,12 @@ class LanguageProcessor(object):
             headers={"Accept": "application/json"},
             timeout=timeout
         )
-        if res.ok:
+        if res.status_code == 200:
             res_dict = res.json()
             words = [Word(**{k: v for k, v in r.items() if k in Word._fields}) for r in res_dict["words"]]
             return [w.text for w in words if w.pos in filter_pos]
         else:
-            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
+            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.text)
             return []
 
     def extract_words_entities(self,
@@ -156,7 +157,7 @@ class LanguageProcessor(object):
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
 
-        res = requests.post(
+        res = httpx.post(
             url=self.route + "/analyze",
             json={
                 "text": text,
@@ -166,7 +167,7 @@ class LanguageProcessor(object):
             timeout=timeout
         )
 
-        if res.ok:
+        if res.status_code == 200:
             res_dict = res.json()
             words = list(filter(lambda w: w.pos in filter_pos,
                                 [Word(**{k: v for k, v in r.items() if k in Word._fields}) for r in res_dict["words"]]))
@@ -175,5 +176,5 @@ class LanguageProcessor(object):
             return words, entities
 
         else:
-            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.reason)
+            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.text)
             return [], []
