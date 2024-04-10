@@ -150,8 +150,6 @@ class Clause(object):
         pass
 
 
-
-
 class Generator(Protocol):
 
     def __init__(self, language: str, version: str = None):
@@ -162,9 +160,6 @@ class Generator(Protocol):
         pass
 
     def generate_clause(self, clause: Clause, **kwargs) -> str:
-        pass
-
-    def generate_update(self, statements: list[Assertion], **kwargs) -> str:
         pass
 
 

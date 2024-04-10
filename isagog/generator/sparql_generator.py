@@ -141,14 +141,6 @@ class SPARQLGenerator(Generator):
 
         return strio.getvalue()
 
-    def generate_update(self, statements: list[Assertion], **kwargs) -> str:
-        """
-        Generates a SPARQL update from a list of assertions
-        :param statements:
-        :param kwargs:
-        :return:
-        """
-        pass
 
 
 _SPARQLGEN = SPARQLGenerator()

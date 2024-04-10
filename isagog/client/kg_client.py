@@ -220,40 +220,43 @@ class KnowledgeBase(object):
             self.logger.error("query individuals return code code %d, reason %s", res.status_code, res.text)
         return []
 
-    def upsert_individual(self, individual: Individual, auth_token=None) -> bool:
+    def upsert_individual(self, individual: ID, assetions: list[Assertion], auth_token=None) -> bool:
         """
         Updates an individual or insert it if not present; existing properties are preserved
 
         :param individual: the individual
+        :param assetions: assertions to be updated
         :param auth_token:
         :return:
         """
-        self.logger.debug("Updating individual %s", individual.id)
-        params = {
-            'id': individual.id
-        }
+        self.logger.debug("Updating individual %s", individual)
 
-        if self.dataset and (self.version == "latest" or self.version > "v1.0.0"):
+        params = {'id': individual}
+        if self.dataset:
             params['dataset'] = self.dataset
 
-        req = individual.to_dict()
+        req = [ass.to_dict() for ass in assetions]
 
         headers = {"Accept": "application/json"}
 
         if auth_token:
             headers["Authorization"] = f'Bearer {auth_token}'
 
-        res = httpx.patch(
-            url=self.route,
-            params=params,
-            json=req,
-            headers=headers
-        )
+        try:
+            res = httpx.patch(
+                url=self.route,
+                params=params,
+                json=req,
+                headers=headers
+            )
 
-        if res.status_code == 200:
-            return True
-        else:
-            raise OSError(f"upsert failed {res.status_code}")
+            if res.status_code == 200:
+                return True
+            else:
+                print(f"upsert failed {res.status_code}")
+                return False
+        except Exception as e:
+            raise e
 
     def delete_individual(self, _id: ID, auth_key=None):
         pass

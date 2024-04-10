@@ -167,7 +167,7 @@ class Assertion(object):
         :param values:
         """
         assert predicate
-        self.property = str(predicate).strip("<>")
+        self.predicate = str(predicate).strip("<>")
         self.subject = str(subject).strip("<>") if subject else None
         self.values = values if values else []
 
@@ -175,8 +175,11 @@ class Assertion(object):
         """Convert to n3"""
         rt = []
         for value in self.values:
-          rt.append(f"<{self.subject}> <{self.property}> {value}")
+            rt.append(f"<{self.subject}> <{self.predicate}> {value}")
         return rt
+
+    def to_dict(self) -> dict:
+        return _todict(self)
 
 
 class Ontology(Graph):
@@ -270,14 +273,24 @@ class Ontology(Graph):
 
 class AttributeInstance(Assertion):
     """
-    Attribute instance, as defined in
-    isagog_api/openapi/isagog_kg.openapi.yaml
+    Attributive assertion
     """
 
-    def __init__(self, **kwargs):
-        predicate = kwargs.get('property', kwargs.get('id', KeyError("missing relation property")))
-        values = kwargs.get('values', [])
+    def __init__(self, predicate: ID = None,
+                 subject: ID = None,
+                 values: list = None, **kwargs):
+        """
+        :param subject: the asserted subject
+        :param predicate: the asserted property
+        :param values: the asserted values
+        :param kwargs:
+        """
+        if predicate is None:
+            predicate = kwargs.get('property', kwargs.get('id', KeyError("missing relation property")))
+        if values is None:
+            values = kwargs.get('values', [])
         super().__init__(predicate=predicate,
+                         subject=subject,
                          values=values)
         self.value_type = kwargs.get('type', "string")
 
@@ -303,18 +316,26 @@ class AttributeInstance(Assertion):
         return len(self.values) == 0 or self.values[0] == "None"
 
 
-VOID_ATTRIBUTE = AttributeInstance(id='http://isagog.com/attribute#void')
+VOID_ATTRIBUTE = AttributeInstance(predicate='http://isagog.com/attribute#void')
 
 
 class RelationInstance(Assertion):
     """
-    Relational assertion, as defined in
-    isagog_api/openapi/isagog_kg.openapi.yaml
+    Relational assertion
     """
 
-    def __init__(self, **kwargs):
-        predicate = kwargs.get('property', kwargs.get('id', KeyError("missing relation property")))
-        values = kwargs.get('values', [])
+    def __init__(self, predicate: ID = None, subject: ID = None, values: list = None, **kwargs):
+        """
+
+        :param property: the asserted property
+        :param subject: the assertion's subject
+        :param values: the asserted values
+        :param kwargs:
+        """
+        if predicate is None:
+            predicate = kwargs.get('property', kwargs.get('id', KeyError("missing relation property")))
+        if values is None:
+            values = kwargs.get('values', [])
         if values:
             specimen = values[0]
             if isinstance(specimen, Individual):
@@ -325,6 +346,7 @@ class RelationInstance(Assertion):
             else:
                 raise ValueError("bad values for relation instance")
         super().__init__(predicate=predicate,
+                         subject=subject,
                          values=values)
 
     def all_values(self, only_id=True) -> list:
@@ -369,12 +391,16 @@ VOID_RELATION = RelationInstance(predicate='http://isagog.com/relation#void')
 
 class Individual(Entity):
     """
-    Individual entity as defined in
-    isagog_api/openapi/isagog_kg.openapi.yaml
-    (Individual)
+    Individual entity
+
     """
 
     def __init__(self, _id: ID, **kwargs):
+        """
+
+        :param _id: the individual identifier
+        :param kwargs:
+        """
         super().__init__(_id, **kwargs)
         self.__owl__ = OWL.NamedIndividual
         self.label = kwargs.get('label', _uri_label(self.id))
@@ -399,7 +425,7 @@ class Individual(Entity):
         :param attribute_id:
         :return:
         """
-        found = next(filter(lambda x: x.property == attribute_id, self.attributes), None)
+        found = next(filter(lambda x: x.predicate == attribute_id, self.attributes), None)
         return found and not found.is_empty()
 
     def get_attribute(self, attribute_id: ID) -> AttributeInstance | Any:
@@ -408,7 +434,7 @@ class Individual(Entity):
         :param attribute_id:
         :return:
         """
-        found = next(filter(lambda x: x.property == attribute_id, self.attributes), None)
+        found = next(filter(lambda x: x.predicate == attribute_id, self.attributes), None)
         if found and not found.is_empty():
             return found
         else:
@@ -420,7 +446,7 @@ class Individual(Entity):
         :param relation_id:
         :return:
         """
-        found = next(filter(lambda x: x.property == relation_id, self.relations), None)
+        found = next(filter(lambda x: x.predicate == relation_id, self.relations), None)
         return found and not found.is_empty()
 
     def get_relation(self, relation_id: ID) -> RelationInstance | Any:
@@ -429,7 +455,7 @@ class Individual(Entity):
         :param relation_id:
         :return:
         """
-        found = next(filter(lambda x: x.property == relation_id, self.relations), None)
+        found = next(filter(lambda x: x.predicate == relation_id, self.relations), None)
         if found and not found.is_empty():
             return found
         else:
