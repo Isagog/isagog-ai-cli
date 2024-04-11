@@ -199,6 +199,7 @@ class Ontology(Graph):
             source: IO[bytes] | TextIO | str,
             publicIRI: str,
             source_format="turtle",
+            **kwargs
     ):
         """
         :param source:  Path to the ontology source file.
