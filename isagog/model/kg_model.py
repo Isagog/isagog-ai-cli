@@ -4,7 +4,7 @@
 """
 import datetime
 import logging
-from typing import IO, TextIO, Any
+from typing import IO, TextIO, Any, Optional
 
 from rdflib import OWL, Graph, RDF, URIRef, RDFS
 
@@ -72,7 +72,7 @@ class Entity(object):
             else:
                 logging.warning("bad owl type %s", owl_type)
 
-    def n3(self, **kwargs) -> str:
+    def n3(self, namespace_manager: Optional["NamespaceManager"] = None) -> str:
         """Convert to n3"""
         return f"<{self.id}>"
 
@@ -186,7 +186,7 @@ class Assertion(object):
         self.subject = str(subject).strip("<>") if subject else None
         self.values = values if values else []
 
-    def n3(self) -> list[str]:
+    def n3(self, namespace_manager: Optional["NamespaceManager"] = None) -> list[str]:
         """Convert to n3"""
         rt = []
         for value in self.values:
