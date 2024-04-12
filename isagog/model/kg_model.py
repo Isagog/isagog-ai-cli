@@ -129,6 +129,8 @@ class Attribute(Entity):
 
         super().__init__(_id, owl=OWL.DatatypeProperty)
         self.domain = kwargs.get('domain', OWL.Thing)
+        self.parents = kwargs.get('parents', [OWL.topDataProperty])
+        self.type = kwargs.get('type', "string")
 
 
 class Relation(Entity):
@@ -143,7 +145,6 @@ class Relation(Entity):
             **kwargs
     ):
         """
-
         :param _id:
         :param kwargs: inverse, domain, range, label
         """
@@ -153,6 +154,7 @@ class Relation(Entity):
         self.domain = kwargs.get('domain', Concept(OWL.Thing))
         self.range = kwargs.get('range', Concept(OWL.Thing))
         self.label = kwargs.get('label', _uri_label(_id))
+        self.parents = kwargs.get('parents', [OWL.topObjectProperty])
 
 
 class Assertion(object):
