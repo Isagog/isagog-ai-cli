@@ -220,7 +220,7 @@ class KnowledgeBase(object):
             self.logger.error("query individuals return code code %d, reason %s", res.status_code, res.text)
         return []
 
-    def upsert_individual(self, individual: ID, assetions: list[Assertion], auth_token=None) -> bool:
+    def upsert_individual(self, individual: Individual, auth_token=None) -> bool:
         """
         Updates an individual or insert it if not present; existing properties are preserved
 
@@ -229,34 +229,40 @@ class KnowledgeBase(object):
         :param auth_token:
         :return:
         """
-        self.logger.debug("Updating individual %s", individual)
+        if individual.need_update():
 
-        params = {'id': individual}
-        if self.dataset:
-            params['dataset'] = self.dataset
+            self.logger.debug("Updating individual %s", individual.id)
 
-        req = [ass.to_dict() for ass in assetions]
+            params = {'id': individual.id}
+            if self.dataset:
+                params['dataset'] = self.dataset
 
-        headers = {"Accept": "application/json"}
+            req = [ass.to_dict() for ass in individual.get_assertions()]
 
-        if auth_token:
-            headers["Authorization"] = f'Bearer {auth_token}'
+            headers = {"Accept": "application/json"}
 
-        try:
-            res = httpx.patch(
-                url=self.route,
-                params=params,
-                json=req,
-                headers=headers
-            )
+            if auth_token:
+                headers["Authorization"] = f'Bearer {auth_token}'
 
-            if res.status_code == 200:
-                return True
-            else:
-                print(f"upsert failed {res.status_code}")
-                return False
-        except Exception as e:
-            raise e
+            try:
+                res = httpx.patch(
+                    url=self.route,
+                    params=params,
+                    json=req,
+                    headers=headers
+                )
+
+                if res.status_code == 200:
+                    individual.updated()
+                    return True
+                else:
+                    print(f"upsert failed {res.status_code}")
+                    return False
+            except Exception as e:
+                raise e
+        else:
+            self.logger.debug("Individual %s doesn't need update", individual.id)
+
 
     def delete_individual(self, _id: ID, auth_key=None):
         pass

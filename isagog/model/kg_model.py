@@ -2,6 +2,7 @@
     A model for Knowledge Graph entities and relations
     (c) Isagog S.r.l. 2024, MIT License
 """
+import datetime
 import logging
 from typing import IO, TextIO, Any
 
@@ -14,6 +15,7 @@ ID = URIRef | str  # Identifier type
 OWL_ENTITY_TYPES = [OWL.Class, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.AnnotationProperty]
 
 PROFILE_ATTRIBUTE = "https://isagog.com/ontology#profile"
+
 
 def _uri_label(uri: str) -> str:
     """
@@ -70,7 +72,7 @@ class Entity(object):
             else:
                 logging.warning("bad owl type %s", owl_type)
 
-    def n3(self) -> str:
+    def n3(self, **kwargs) -> str:
         """Convert to n3"""
         return f"<{self.id}>"
 
@@ -411,13 +413,24 @@ class Individual(Entity):
         :param _id: the individual identifier
         :param kwargs:
         """
-        super().__init__(_id, owl=OWL.NamedIndividual,  **kwargs)
+        super().__init__(_id, owl=OWL.NamedIndividual, **kwargs)
+        self.attributes = []
+        self.relations = []
         self.label = kwargs.get('label', _uri_label(self.id))
+        self.add_attribute(AttributeInstance(predicate=RDFS.label, values=[self.label]))
+
         self.kind = kwargs.get('kind', kwargs.get('kinds', [OWL.Thing]))  # back compatibility w 0.7
+        if not all(x == OWL.Thing for x in self.kind):
+            self.add_attribute(AttributeInstance(predicate=RDF.type, values=self.kind))
+
         self.comment = kwargs.get('comment', '')
-        self.attributes = [AttributeInstance(**a_data) for a_data in
-                           kwargs.get('attributes', list[AttributeInstance]())]
-        self.relations = [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())]
+        if self.comment:
+            self.add_attribute(AttributeInstance(predicate=RDFS.comment, values=[self.comment]))
+
+        self.attributes.extend([AttributeInstance(**a_data) for a_data in
+                                kwargs.get('attributes', list[AttributeInstance]())])
+        self.relations.extend(
+            [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())])
         if 'score' in kwargs:
             self.score = float(kwargs.get('score'))
         if self.has_attribute(PROFILE_ATTRIBUTE):
@@ -427,6 +440,7 @@ class Individual(Entity):
             }
         else:
             self.profile = {}
+        self._refresh = True
 
     def has_attribute(self, attribute_id: ID) -> bool:
         """
@@ -470,6 +484,13 @@ class Individual(Entity):
         else:
             return VOID_RELATION
 
+    def get_assertions(self) -> list[Assertion]:
+        """
+        Gets all assertions about the individual
+        :return:
+        """
+        return self.attributes + self.relations
+
     def set_score(self, score: float):
         self.score = score
 
@@ -481,3 +502,28 @@ class Individual(Entity):
 
     def has_score(self) -> bool:
         return hasattr(self, 'score')
+
+    def add_attribute(self, attribute: AttributeInstance):
+        """
+        Adds an attribute to the individual
+        :param attribute:
+        """
+        attribute.subject = self.id
+        self.attributes.append(attribute)
+        self._refresh = True
+
+    def add_relation(self, relation: RelationInstance):
+        """
+
+        :param relation:
+        :return:
+        """
+        relation.subject = self.id
+        self.relations.append(relation)
+        self._refresh = True
+
+    def need_update(self):
+        return self._refresh
+
+    def updated(self):
+        self._refresh = False
