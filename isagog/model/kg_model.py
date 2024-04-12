@@ -2,7 +2,7 @@
     A model for Knowledge Graph entities and relations
     (c) Isagog S.r.l. 2024, MIT License
 """
-
+import logging
 from typing import IO, TextIO, Any
 
 from rdflib import OWL, Graph, RDF, URIRef, RDFS
@@ -11,8 +11,9 @@ from rdflib import OWL, Graph, RDF, URIRef, RDFS
 
 ID = URIRef | str  # Identifier type
 
-ALLOWED_TYPES = [OWL.Axiom, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.Class]
+OWL_ENTITY_TYPES = [OWL.Class, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.AnnotationProperty]
 
+PROFILE_ATTRIBUTE = "https://isagog.com/ontology#profile"
 
 def _uri_label(uri: str) -> str:
     """
@@ -61,9 +62,13 @@ class Entity(object):
 
     def __init__(self, _id: ID, **kwargs):
         assert _id
-        self.id = str(_id).strip("<>") if isinstance(_id, URIRef) else _id
+        self.id = str(_id).strip("<>")
         owl_type = kwargs.get('owl')
-        self.__owl__ = owl_type if owl_type and owl_type in ALLOWED_TYPES else None
+        if owl_type:
+            if owl_type in OWL_ENTITY_TYPES:
+                self.__owl__ = owl_type
+            else:
+                logging.warning("bad owl type %s", owl_type)
 
     def n3(self) -> str:
         """Convert to n3"""
@@ -88,8 +93,8 @@ class Annotation(Entity):
     References to owl:AnnotationProperty
     """
 
-    def __init__(self, _id: ID):
-        super().__init__(self, _id=_id)
+    def __init__(self, _id: ID, **kwargs):
+        super().__init__(self, _id=_id, owl=OWL.AnnotationProperty, **kwargs)
 
 
 class Concept(Entity):
@@ -103,8 +108,7 @@ class Concept(Entity):
         :param _id: the concept identifier
         :param kwargs:
         """
-        kwargs['owl'] = OWL.Class
-        super().__init__(_id, **kwargs)
+        super().__init__(_id, owl=OWL.Class, **kwargs)
         self.comment = kwargs.get('comment', "")
         self.ontology = kwargs.get('ontology', "")
         self.parents = kwargs.get('parents', [OWL.Thing])
@@ -122,8 +126,8 @@ class Attribute(Entity):
         :param _id:
         :param kwargs: domain
         """
-        kwargs['owl'] = OWL.DatatypeProperty
-        super().__init__(_id, **kwargs)
+
+        super().__init__(_id, owl=OWL.DatatypeProperty)
         self.domain = kwargs.get('domain', OWL.Thing)
 
 
@@ -143,8 +147,8 @@ class Relation(Entity):
         :param _id:
         :param kwargs: inverse, domain, range, label
         """
-        kwargs['owl'] = OWL.ObjectProperty
-        super().__init__(_id, **kwargs)
+
+        super().__init__(_id, owl=OWL.ObjectProperty)
         self.inverse = kwargs.get('inverse')
         self.domain = kwargs.get('domain', Concept(OWL.Thing))
         self.range = kwargs.get('range', Concept(OWL.Thing))
@@ -153,20 +157,27 @@ class Relation(Entity):
 
 class Assertion(object):
     """
-    Logical assertion of the form: property(subject, values)
+    Assertion axiom of the form: property(subject, values)
     """
 
     def __init__(self,
-                 predicate: ID,
+                 predicate: ID = None,
                  subject: ID = None,
-                 values: list = None):
+                 values: list = None,
+                 **kwargs):
         """
 
         :param predicate:
         :param subject:
         :param values:
         """
-        assert predicate
+        if predicate is None:
+            predicate = kwargs.get('property', kwargs.get('id', None))
+            if predicate is None:
+                raise ValueError("missing predicate")
+        if values is None:
+            values = kwargs.get('values', [])
+
         self.predicate = str(predicate).strip("<>")
         self.subject = str(subject).strip("<>") if subject else None
         self.values = values if values else []
@@ -279,20 +290,19 @@ class AttributeInstance(Assertion):
 
     def __init__(self, predicate: ID = None,
                  subject: ID = None,
-                 values: list = None, **kwargs):
+                 values: list = None,
+                 **kwargs):
         """
         :param subject: the asserted subject
         :param predicate: the asserted property
         :param values: the asserted values
         :param kwargs:
         """
-        if predicate is None:
-            predicate = kwargs.get('property', kwargs.get('id', KeyError("missing relation property")))
-        if values is None:
-            values = kwargs.get('values', [])
+
         super().__init__(predicate=predicate,
                          subject=subject,
-                         values=values)
+                         values=values,
+                         **kwargs)
         self.value_type = kwargs.get('type', "string")
 
     def all_values_as_string(self) -> str:
@@ -333,10 +343,6 @@ class RelationInstance(Assertion):
         :param values: the asserted values
         :param kwargs:
         """
-        if predicate is None:
-            predicate = kwargs.get('property', kwargs.get('id', KeyError("missing relation property")))
-        if values is None:
-            values = kwargs.get('values', [])
         if values:
             specimen = values[0]
             if isinstance(specimen, Individual):
@@ -348,7 +354,8 @@ class RelationInstance(Assertion):
                 raise ValueError("bad values for relation instance")
         super().__init__(predicate=predicate,
                          subject=subject,
-                         values=values)
+                         values=values,
+                         **kwargs)
 
     def all_values(self, only_id=True) -> list:
         """
@@ -402,8 +409,7 @@ class Individual(Entity):
         :param _id: the individual identifier
         :param kwargs:
         """
-        super().__init__(_id, **kwargs)
-        self.__owl__ = OWL.NamedIndividual
+        super().__init__(_id, owl=OWL.NamedIndividual,  **kwargs)
         self.label = kwargs.get('label', _uri_label(self.id))
         self.kind = kwargs.get('kind', kwargs.get('kinds', [OWL.Thing]))  # back compatibility w 0.7
         self.comment = kwargs.get('comment', '')
@@ -412,10 +418,10 @@ class Individual(Entity):
         self.relations = [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())]
         if 'score' in kwargs:
             self.score = float(kwargs.get('score'))
-        if self.has_attribute("https://isagog.com/ontology#profile"):
+        if self.has_attribute(PROFILE_ATTRIBUTE):
             self.profile = {
                 profile_value.split("=")[0]: int(profile_value.split("=")[1])
-                for profile_value in self.get_attribute("https://isagog.com/ontology#profile").values
+                for profile_value in self.get_attribute(PROFILE_ATTRIBUTE).values
             }
         else:
             self.profile = {}
