@@ -72,10 +72,6 @@ class Entity(object):
             else:
                 logging.warning("bad owl type %s", owl_type)
 
-    def n3(self, namespace_manager: Optional["NamespaceManager"] = None) -> str:
-        """Convert to n3"""
-        return f"<{self.id}>"
-
     def __eq__(self, other):
         return (
                 (isinstance(other, Entity) and self.id == other.id)
@@ -185,13 +181,6 @@ class Assertion(object):
         self.predicate = str(predicate).strip("<>")
         self.subject = str(subject).strip("<>") if subject else None
         self.values = values if values else []
-
-    def n3(self, namespace_manager: Optional["NamespaceManager"] = None) -> list[str]:
-        """Convert to n3"""
-        rt = []
-        for value in self.values:
-            rt.append(f"<{self.subject}> <{self.predicate}> {value}")
-        return rt
 
     def to_dict(self) -> dict:
         return _todict(self)
