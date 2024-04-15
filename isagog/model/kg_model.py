@@ -434,30 +434,46 @@ class Individual(Entity):
 
     """
 
-    def __init__(self, _id: Reference, **kwargs):
+    def __init__(self, _id: Reference,
+                 attributes: list[AttributeInstance | dict] = None,
+                 relations: list[RelationInstance | dict] = None,
+                 **kwargs):
         """
 
         :param _id: the individual identifier
+        :param attributes: the individual attributes
+        :param relations: the individual relations
         :param kwargs:
         """
         super().__init__(_id, owl=OWL.NamedIndividual, **kwargs)
         self.attributes = []
         self.relations = []
-        self.label = kwargs.get('label', _uri_label(self.id))
-        self.add_attribute(AttributeInstance(predicate=RDFS.label, values=[self.label]))
+        # self.label = kwargs.get('label', _uri_label(self.id))
+        # self.add_attribute(AttributeInstance(predicate=RDFS.label, values=[self.label]))
+        #
+        # self.kind = kwargs.get('kind', kwargs.get('kinds', [OWL.Thing]))  # back compatibility w 0.7
+        # if not all(x == OWL.Thing for x in self.kind):
+        #     self.add_attribute(AttributeInstance(predicate=RDF.type, values=self.kind))
+        #
+        # self.comment = kwargs.get('comment', '')
+        # if self.comment:
+        #     self.add_attribute(AttributeInstance(predicate=RDFS.comment, values=[self.comment]))
 
-        self.kind = kwargs.get('kind', kwargs.get('kinds', [OWL.Thing]))  # back compatibility w 0.7
-        if not all(x == OWL.Thing for x in self.kind):
-            self.add_attribute(AttributeInstance(predicate=RDF.type, values=self.kind))
+        if attributes:
+            for attribute in attributes:
+                if isinstance(attribute, dict):
+                    attribute = AttributeInstance(**attribute)
+                self.add_attribute(attribute)
 
-        self.comment = kwargs.get('comment', '')
-        if self.comment:
-            self.add_attribute(AttributeInstance(predicate=RDFS.comment, values=[self.comment]))
-
-        self.attributes.extend([AttributeInstance(**a_data) for a_data in
-                                kwargs.get('attributes', list[AttributeInstance]())])
-        self.relations.extend(
-            [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())])
+        # self.attributes.extend([AttributeInstance(**a_data) for a_data in
+        #                         kwargs.get('attributes', list[AttributeInstance]())])
+        if relations:
+            for relation in relations:
+                if isinstance(relation, dict):
+                    relation = RelationInstance(**relation)
+                self.add_relation(relation)
+        # self.relations.extend(
+        #     [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())])
         if 'score' in kwargs:
             self.score = float(kwargs.get('score'))
         if self.has_attribute(PROFILE_ATTRIBUTE):
@@ -538,6 +554,8 @@ class Individual(Entity):
         Adds an attribute to the individual
         :param attribute:
         """
+        if attribute.subject and attribute.subject != self.id:
+            logging.warning("attribute for %s redeclared for %s", attribute.subject, self.id)
         attribute.subject = self.id
         self.attributes.append(attribute)
         self._refresh = True
@@ -548,6 +566,8 @@ class Individual(Entity):
         :param relation:
         :return:
         """
+        if relation.subject and relation.subject != self.id:
+            logging.warning("relation for %s redeclared for %s", relation.subject, self.id)
         relation.subject = self.id
         self.relations.append(relation)
         self._refresh = True
