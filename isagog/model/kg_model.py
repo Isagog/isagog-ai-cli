@@ -2,15 +2,14 @@
     A model for Knowledge Graph entities and relations
     (c) Isagog S.r.l. 2024, MIT License
 """
-import datetime
 import logging
-from typing import IO, TextIO, Any, Optional
+from typing import IO, TextIO, Any
 
-from rdflib import OWL, Graph, RDF, URIRef, RDFS
+from rdflib import OWL, Graph, RDF, URIRef, RDFS, Literal
 
 # Type definitions
 
-ID = URIRef | str  # Identifier type
+Reference = URIRef | str
 
 OWL_ENTITY_TYPES = [OWL.Class, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.AnnotationProperty]
 
@@ -60,17 +59,25 @@ def _todict(obj, classkey=None):
 class Entity(object):
     """
     Any identified knowledge entity, either predicative (property) or individual
+    Every entity has a string identifier and an optional meta type, which can be an OWL type
     """
 
-    def __init__(self, _id: ID, **kwargs):
+    def __init__(self, _id: Reference, **kwargs):
+        """
+
+        :param _id: the entity identifier, will be converted to a string
+        :param kwargs:
+        """
         assert _id
         self.id = str(_id).strip("<>")
         owl_type = kwargs.get('owl')
         if owl_type:
             if owl_type in OWL_ENTITY_TYPES:
-                self.__owl__ = owl_type
+                self.__meta__ = owl_type
             else:
                 logging.warning("bad owl type %s", owl_type)
+        else:
+            self.__meta__ = kwargs.get('meta', None)
 
     def __eq__(self, other):
         return (
@@ -86,21 +93,12 @@ class Entity(object):
         return _todict(self)
 
 
-class Annotation(Entity):
-    """
-    References to owl:AnnotationProperty
-    """
-
-    def __init__(self, _id: ID, **kwargs):
-        super().__init__(self, _id=_id, owl=OWL.AnnotationProperty, **kwargs)
-
-
 class Concept(Entity):
     """
     Unary predicate
     """
 
-    def __init__(self, _id: ID, **kwargs):
+    def __init__(self, _id: Reference, **kwargs):
         """
 
         :param _id: the concept identifier
@@ -118,7 +116,7 @@ class Attribute(Entity):
     owl:DatatypeProperties
     """
 
-    def __init__(self, _id: ID, **kwargs):
+    def __init__(self, _id: Reference, **kwargs):
         """
 
         :param _id:
@@ -139,7 +137,7 @@ class Relation(Entity):
 
     def __init__(
             self,
-            _id: ID,
+            _id: Reference,
             **kwargs
     ):
         """
@@ -161,8 +159,8 @@ class Assertion(object):
     """
 
     def __init__(self,
-                 predicate: ID = None,
-                 subject: ID = None,
+                 predicate: Reference = None,
+                 subject: Reference = None,
                  values: list = None,
                  **kwargs):
         """
@@ -172,11 +170,10 @@ class Assertion(object):
         :param values:
         """
         if predicate is None:
+            # try to get the predicate from the kwargs, if not present raise an error
             predicate = kwargs.get('property', kwargs.get('id', None))
             if predicate is None:
                 raise ValueError("missing predicate")
-        if values is None:
-            values = kwargs.get('values', [])
 
         self.predicate = str(predicate).strip("<>")
         self.subject = str(subject).strip("<>") if subject else None
@@ -184,6 +181,9 @@ class Assertion(object):
 
     def to_dict(self) -> dict:
         return _todict(self)
+
+    def is_empty(self) -> bool:
+        return not self.values
 
 
 class Ontology(Graph):
@@ -281,43 +281,79 @@ class AttributeInstance(Assertion):
     Attributive assertion
     """
 
-    def __init__(self, predicate: ID = None,
-                 subject: ID = None,
-                 values: list = None,
+    def __init__(self, predicate: Reference = None,
+                 subject: Reference = None,
+                 values: list[str | int | float | bool] = None,
                  **kwargs):
         """
         :param subject: the asserted subject
         :param predicate: the asserted property
-        :param values: the asserted values
+        :param values: the asserted values, they can be strings, integers, floats or booleans
         :param kwargs:
         """
+        self.value_type = kwargs.get('type')
+        if values:
+            specimen = values[0]
+            if isinstance(specimen, str):
+                if self.value_type:
+                    if self.value_type == "string":
+                        pass
+                    else:
+                        raise ValueError("bad values for string attribute")
+                else:
+                    self.value_type = "string"
 
+            elif isinstance(specimen, int):
+                if self.value_type:
+                    if self.value_type == "int":
+                        pass
+                    else:
+                        raise ValueError("bad values for int attribute")
+                else:
+                    self.value_type = "int"
+                raise ValueError("bad values for int attribute")
+
+            elif isinstance(specimen, float):
+                if self.value_type:
+                    if self.value_type == "float":
+                        pass
+                    else:
+                        raise ValueError("bad values for float attribute")
+                else:
+                    self.value_type = "float"
+
+            elif isinstance(specimen, bool):
+                if self.value_type:
+                    if self.value_type == "bool":
+                        pass
+                    else:
+                        raise ValueError("bad values for bool attribute")
+                else:
+                    self.value_type = "bool"
+            else:
+                raise ValueError("bad values for attribute")
         super().__init__(predicate=predicate,
                          subject=subject,
                          values=values,
                          **kwargs)
-        self.value_type = kwargs.get('type', "string")
 
     def all_values_as_string(self) -> str:
         match len(self.values):
             case 0:
                 return ""
             case 1:
-                return self.values[0]
+                return str(self.values[0])
             case _:
-                return "\n".join(self.values)
+                return "\n".join([str(v) for v in self.values])
 
     def all_values(self) -> list:
         return self.values
 
-    def first_value(self, default=None) -> Any | None:
+    def first_value(self, default=None) -> str | int | float | bool | None:
         if len(self.values) > 0:
             return self.values[0]
         else:
             return default
-
-    def is_empty(self) -> bool:
-        return len(self.values) == 0 or self.values[0] == "None"
 
 
 VOID_ATTRIBUTE = AttributeInstance(predicate='http://isagog.com/attribute#void')
@@ -328,23 +364,28 @@ class RelationInstance(Assertion):
     Relational assertion
     """
 
-    def __init__(self, predicate: ID = None, subject: ID = None, values: list = None, **kwargs):
+    def __init__(self, predicate: Reference = None,
+                 subject: Reference = None,
+                 values: list[Any | Reference | dict] = None,
+                 **kwargs):
         """
 
         :param property: the asserted property
         :param subject: the assertion's subject
-        :param values: the asserted values
+        :param values: the asserted values, they can be individuals, references or dictionaries
         :param kwargs:
         """
         if values:
             specimen = values[0]
-            if isinstance(specimen, Individual):
+            if isinstance(specimen, (Individual, Reference)):
+                # values are acceptable
                 pass
             elif isinstance(specimen, dict):
+                # if values are dictionaries, then convert them to Individuals
                 inst_values = [Individual(_id=r_data.get('id'), **r_data) for r_data in values]
                 values = inst_values
             else:
-                raise ValueError("bad values for relation instance")
+                raise ValueError("bad values for relational assertion")
         super().__init__(predicate=predicate,
                          subject=subject,
                          values=values,
@@ -370,9 +411,6 @@ class RelationInstance(Assertion):
         else:
             return default
 
-    def is_empty(self) -> bool:
-        return len(self.values) == 0
-
     def kind_map(self) -> dict:
         """
         Returns a map of individuals by kind
@@ -396,7 +434,7 @@ class Individual(Entity):
 
     """
 
-    def __init__(self, _id: ID, **kwargs):
+    def __init__(self, _id: Reference, **kwargs):
         """
 
         :param _id: the individual identifier
@@ -431,7 +469,7 @@ class Individual(Entity):
             self.profile = {}
         self._refresh = True
 
-    def has_attribute(self, attribute_id: ID) -> bool:
+    def has_attribute(self, attribute_id: Reference) -> bool:
         """
         Checks if the individual has a given ontology defined attribute
         :param attribute_id:
@@ -440,7 +478,7 @@ class Individual(Entity):
         found = next(filter(lambda x: x.predicate == attribute_id, self.attributes), None)
         return found and not found.is_empty()
 
-    def get_attribute(self, attribute_id: ID) -> AttributeInstance | Any:
+    def get_attribute(self, attribute_id: Reference) -> AttributeInstance | Any:
         """
         Gets the ontology defined attribute instance of the individual
         :param attribute_id:
@@ -452,7 +490,7 @@ class Individual(Entity):
         else:
             return VOID_ATTRIBUTE
 
-    def has_relation(self, relation_id: ID) -> bool:
+    def has_relation(self, relation_id: Reference) -> bool:
         """
         Checks if the individual has a given ontology defined relation
         :param relation_id:
@@ -461,7 +499,7 @@ class Individual(Entity):
         found = next(filter(lambda x: x.predicate == relation_id, self.relations), None)
         return found and not found.is_empty()
 
-    def get_relation(self, relation_id: ID) -> RelationInstance | Any:
+    def get_relation(self, relation_id: Reference) -> RelationInstance | Any:
         """
         Gets the ontology defined relation instance of the individual
         :param relation_id:
