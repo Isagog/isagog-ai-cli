@@ -463,7 +463,7 @@ class Individual(Entity):
             for attribute in attributes:
                 if isinstance(attribute, dict):
                     attribute = AttributeInstance(**attribute)
-                self.add_attribute(attribute)
+                self.add_attribute(instance=attribute)
 
         # self.attributes.extend([AttributeInstance(**a_data) for a_data in
         #                         kwargs.get('attributes', list[AttributeInstance]())])
@@ -471,7 +471,7 @@ class Individual(Entity):
             for relation in relations:
                 if isinstance(relation, dict):
                     relation = RelationInstance(**relation)
-                self.add_relation(relation)
+                self.add_relation(instance=relation)
         # self.relations.extend(
         #     [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())])
         if 'score' in kwargs:
@@ -546,28 +546,66 @@ class Individual(Entity):
     def has_score(self) -> bool:
         return hasattr(self, 'score')
 
-    def add_attribute(self, attribute: AttributeInstance):
+    def add_attribute(self,
+                      predicate: Reference | str = None,
+                      values: list[str | int | float | bool] = None,
+                      instance: AttributeInstance = None):
         """
         Adds an attribute to the individual
-        :param attribute:
+        One of predicate or instance must be provided (but not both: in that case, instance is preferred)
+        :param values:
+        :param predicate:
+        :param instance:
         """
-        if attribute.subject and attribute.subject != self.id:
-            logging.warning("attribute for %s redeclared for %s", attribute.subject, self.id)
-        attribute.subject = self.id
-        self.attributes.append(attribute)
+        if instance:
+            if not isinstance(instance, AttributeInstance):
+                raise ValueError("bad instance")
+            if instance.subject and instance.subject != self.id:
+                logging.warning("attribute for %s redeclared for %s", instance.subject, self.id)
+            instance.subject = self.id
+            existing = self.get_attribute(instance.predicate)
+            if not existing or existing.is_empty():
+                self.attributes.append(instance)
+            else:
+                existing.values.extend(instance.values)
+        else:
+            if not predicate:
+                raise ValueError("missing property")
+            if not isinstance(predicate, (Reference, str)):
+                raise ValueError("bad property")
+            self.add_attribute(instance=AttributeInstance(predicate=predicate, values=values))
         self._refresh = True
 
-    def add_relation(self, relation: RelationInstance):
+    def add_relation(self,
+                     predicate: Reference | str = None,
+                     values: list[Reference | str] = None,
+                     instance: RelationInstance = None):
         """
-
-        :param relation:
+        Adds a relation to the individual
+        One of predicate or instance must be provided (but not both: in that case, instance is preferred)
+        :param instance:
+        :param values:
+        :param predicate:
         :return:
         """
-        if relation.subject and relation.subject != self.id:
-            logging.warning("relation for %s redeclared for %s", relation.subject, self.id)
-        relation.subject = self.id
-        self.relations.append(relation)
-        self._refresh = True
+        if instance:
+            if not isinstance(instance, RelationInstance):
+                raise ValueError("bad instance")
+            if instance.subject and instance.subject != self.id:
+                logging.warning("relation for %s redeclared for %s", instance.subject, self.id)
+            instance.subject = self.id
+            existing = self.get_relation(instance.predicate)
+            if not existing or existing.is_empty():
+                self.relations.append(instance)
+            else:
+                existing.values.extend(instance.values)
+            self._refresh = True
+        else:
+            if not predicate:
+                raise ValueError("missing property")
+            if not isinstance(predicate, (Reference, str)):
+                raise ValueError("bad property")
+            self.add_relation(instance=RelationInstance(predicate=predicate, values=values))
 
     def need_update(self):
         return self._refresh
