@@ -494,7 +494,7 @@ class Individual(Entity):
         found = next(filter(lambda x: x.predicate == attribute_id, self.attributes), None)
         return found and not found.is_empty()
 
-    def get_attribute(self, attribute_id: Reference) -> AttributeInstance | Any:
+    def get_attribute(self, attribute_id: Reference) -> AttributeInstance | None:
         """
         Gets the ontology defined attribute instance of the individual
         :param attribute_id:
@@ -515,7 +515,7 @@ class Individual(Entity):
         found = next(filter(lambda x: x.predicate == relation_id, self.relations), None)
         return found and not found.is_empty()
 
-    def get_relation(self, relation_id: Reference) -> RelationInstance | Any:
+    def get_relation(self, relation_id: Reference) -> RelationInstance | None:
         """
         Gets the ontology defined relation instance of the individual
         :param relation_id:
@@ -527,15 +527,12 @@ class Individual(Entity):
         else:
             return VOID_RELATION
 
-    def get_assertions(self, predicate: Reference = None) -> list[Assertion]:
+    def get_assertions(self) -> list[Assertion]:
         """
         Gets all assertions about the individual
         :return:
         """
-        if predicate:
-            return [a for a in self.attributes + self.relations if a.predicate == predicate]
-        else:
-            return self.attributes + self.relations
+        return self.attributes + self.relations
 
     def set_score(self, score: float):
         self.score = score
