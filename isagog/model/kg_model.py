@@ -5,7 +5,7 @@
 import logging
 from typing import IO, TextIO, Any
 
-from rdflib import OWL, Graph, RDF, URIRef, RDFS, Literal
+from rdflib import OWL, Graph, RDF, URIRef, RDFS
 
 # Type definitions
 
