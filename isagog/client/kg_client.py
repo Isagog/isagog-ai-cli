@@ -11,7 +11,7 @@ from typing import Type, TypeVar
 import httpx
 from dotenv import load_dotenv
 
-from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, ID
+from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, Reference
 from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
 
 load_dotenv()
@@ -49,7 +49,7 @@ class KnowledgeBase(object):
         self.logger.info("Isagog KG client (%s) initialized on route %s", hex(id(self)), route)
 
     def get_entity(self,
-                   _id: ID,
+                   _id: Reference,
                    expand: bool = True,
                    entity_type: Type[E] = Entity
                    ) -> E | None:
@@ -264,5 +264,5 @@ class KnowledgeBase(object):
             self.logger.debug("Individual %s doesn't need update", individual.id)
 
 
-    def delete_individual(self, _id: ID, auth_key=None):
+    def delete_individual(self, _id: Reference, auth_key=None):
         pass

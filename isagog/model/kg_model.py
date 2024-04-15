@@ -511,12 +511,15 @@ class Individual(Entity):
         else:
             return VOID_RELATION
 
-    def get_assertions(self) -> list[Assertion]:
+    def get_assertions(self, predicate: Reference = None) -> list[Assertion]:
         """
         Gets all assertions about the individual
         :return:
         """
-        return self.attributes + self.relations
+        if predicate:
+            return [a for a in self.attributes + self.relations if a.predicate == predicate]
+        else:
+            return self.attributes + self.relations
 
     def set_score(self, score: float):
         self.score = score
