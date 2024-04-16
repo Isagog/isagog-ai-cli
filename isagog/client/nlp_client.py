@@ -7,7 +7,6 @@ import os
 import time
 import httpx
 
-
 from dotenv import load_dotenv
 
 from isagog.model.nlp_model import Word, NamedEntity
@@ -18,6 +17,9 @@ NLP_DEFAULT_TIMEOUT = int(os.getenv('NLP_DEFAULT_TIMEOUT', 60))
 
 DEFAULT_LEXICAL_POS = ["NOUN", "VERB", "ADJ", "ADV"]
 DEFAULT_SEARCH_POS = ["NOUN", "VERB", "PROPN"]
+
+AUTH_TOKEN_KEY = os.getenv('ISAGOG_AUTH_TOKEN_KEY', 'X-Isagog-API-Token')
+AUTH_TOKEN_VALUE = os.getenv('ISAGOG_AUTH_TOKEN_VALUE')
 
 
 def truncate(s: str, n=10):
@@ -92,6 +94,12 @@ class LanguageProcessor(object):
         :return:
         """
         self.logger.debug("Extracting %d keywords from %s", number, truncate(text))
+
+        headers = {"Accept": "application/json"}
+
+        if AUTH_TOKEN_VALUE:
+            headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
+
         res = httpx.post(
             url=self.route + "/analyze",
             json={
@@ -99,7 +107,7 @@ class LanguageProcessor(object):
                 "tasks": ["keyword"],
                 "keyword_number": number
             },
-            headers={"Accept": "application/json"},
+            headers=headers,
             timeout=timeout
         )
         if res.status_code == 200:
@@ -125,13 +133,18 @@ class LanguageProcessor(object):
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
 
+        headers = {"Accept": "application/json"}
+
+        if AUTH_TOKEN_VALUE:
+            headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
+
         res = httpx.post(
             url=self.route + "/analyze",
             json={
                 "text": text,
                 "tasks": ["word"]
             },
-            headers={"Accept": "application/json"},
+            headers=headers,
             timeout=timeout
         )
         if res.status_code == 200:
@@ -157,13 +170,18 @@ class LanguageProcessor(object):
         if not filter_pos:
             filter_pos = DEFAULT_LEXICAL_POS
 
+        headers = {"Accept": "application/json"}
+
+        if AUTH_TOKEN_VALUE:
+            headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
+
         res = httpx.post(
             url=self.route + "/analyze",
             json={
                 "text": text,
                 "tasks": ["word", "entity"]
             },
-            headers={"Accept": "application/json"},
+            headers=headers,
             timeout=timeout
         )
 

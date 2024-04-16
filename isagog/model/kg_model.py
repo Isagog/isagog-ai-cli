@@ -112,11 +112,15 @@ class Concept(Entity):
 
 class Attribute(Entity):
     """
-    Assertions ranging on concrete domains
+    Class of assertions ranging on concrete domains
     owl:DatatypeProperties
     """
 
-    def __init__(self, _id: Reference, **kwargs):
+    def __init__(self,
+                 _id: Reference,
+                 domain: Reference = None,
+                 parents: list[Reference] = None,
+                 **kwargs):
         """
 
         :param _id:
@@ -124,20 +128,25 @@ class Attribute(Entity):
         """
 
         super().__init__(_id, owl=OWL.DatatypeProperty)
-        self.domain = kwargs.get('domain', OWL.Thing)
-        self.parents = kwargs.get('parents', [OWL.topDataProperty])
-        self.type = kwargs.get('type', "string")
+        self.domain = domain if domain else OWL.Thing
+        self.parents = parents if parents else [OWL.topDataProperty]
+        if 'type' in kwargs:
+            self.__type__ = kwargs.get('type')
 
 
 class Relation(Entity):
     """
-    Assertions ranging on individuals
+    Class of assertions ranging on individuals
     owl:ObjectProperty
     """
 
     def __init__(
             self,
             _id: Reference,
+            domain: Reference = None,
+            range: Reference = None,
+            inverse: Reference = None,
+            parents: list[Reference] = None,
             **kwargs
     ):
         """
@@ -146,11 +155,11 @@ class Relation(Entity):
         """
 
         super().__init__(_id, owl=OWL.ObjectProperty)
-        self.inverse = kwargs.get('inverse')
-        self.domain = kwargs.get('domain', Concept(OWL.Thing))
-        self.range = kwargs.get('range', Concept(OWL.Thing))
+        self.inverse = inverse if inverse else None
+        self.domain = domain if domain else OWL.Thing
+        self.range = range if range else OWL.Thing
         self.label = kwargs.get('label', _uri_label(_id))
-        self.parents = kwargs.get('parents', [OWL.topObjectProperty])
+        self.parents = parents if parents else OWL.topObjectProperty
 
 
 class Assertion(object):
@@ -161,7 +170,7 @@ class Assertion(object):
     def __init__(self,
                  predicate: Reference = None,
                  subject: Reference = None,
-                 values: set = None,
+                 values: list = None,
                  **kwargs):
         """
 
@@ -170,7 +179,7 @@ class Assertion(object):
         :param values:
         """
         if predicate is None:
-            # try to get the predicate from the kwargs, if not present raise an error
+            # try to get the predicate from aliases in kwargs, if not present raise an error
             predicate = kwargs.get('property', kwargs.get('id', None))
             if predicate is None:
                 raise ValueError("missing predicate")
@@ -280,7 +289,8 @@ class AttributeInstance(Assertion):
     Attributive assertion
     """
 
-    def __init__(self, predicate: Reference = None,
+    def __init__(self,
+                 predicate: Reference = None,
                  subject: Reference = None,
                  values: list[str | int | float | bool] = None,
                  **kwargs):
@@ -447,32 +457,17 @@ class Individual(Entity):
         super().__init__(_id, owl=OWL.NamedIndividual, **kwargs)
         self.attributes = list()
         self.relations = list()
-        # self.label = kwargs.get('label', _uri_label(self.id))
-        # self.add_attribute(AttributeInstance(predicate=RDFS.label, values=[self.label]))
-        #
-        # self.kind = kwargs.get('kind', kwargs.get('kinds', [OWL.Thing]))  # back compatibility w 0.7
-        # if not all(x == OWL.Thing for x in self.kind):
-        #     self.add_attribute(AttributeInstance(predicate=RDF.type, values=self.kind))
-        #
-        # self.comment = kwargs.get('comment', '')
-        # if self.comment:
-        #     self.add_attribute(AttributeInstance(predicate=RDFS.comment, values=[self.comment]))
-
         if attributes:
             for attribute in attributes:
                 if isinstance(attribute, dict):
                     attribute = AttributeInstance(**attribute)
                 self.add_attribute(instance=attribute)
 
-        # self.attributes.extend([AttributeInstance(**a_data) for a_data in
-        #                         kwargs.get('attributes', list[AttributeInstance]())])
         if relations:
             for relation in relations:
                 if isinstance(relation, dict):
                     relation = RelationInstance(**relation)
                 self.add_relation(instance=relation)
-        # self.relations.extend(
-        #     [RelationInstance(**r_data) for r_data in kwargs.get('relations', list[RelationInstance]())])
         if 'score' in kwargs:
             self.score = float(kwargs.get('score'))
         if self.has_attribute(PROFILE_ATTRIBUTE):

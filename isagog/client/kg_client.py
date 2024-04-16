@@ -21,6 +21,9 @@ KG_DEFAULT_TIMEOUT = int(os.getenv('KG_DEFAULT_TIMEOUT', 120))
 # Type variable for the Entity hierarchy
 E = TypeVar('E', bound='Entity')
 
+AUTH_TOKEN_KEY = os.getenv('ISAGOG_AUTH_TOKEN_KEY', 'X-Isagog-API-Token')
+AUTH_TOKEN_VALUE = os.getenv('ISAGOG_AUTH_TOKEN_VALUE')
+
 
 class KnowledgeBase(object):
     """
@@ -51,7 +54,7 @@ class KnowledgeBase(object):
     def get_entity(self,
                    _id: Reference,
                    expand: bool = True,
-                   entity_type: Type[E] = Entity
+                   entity_type: Type[E] = Entity,
                    ) -> E | None:
         """
         Gets the entity by its identifier
@@ -71,13 +74,18 @@ class KnowledgeBase(object):
 
         params = f"id={_id}&expand={expand}"
 
+        headers = {"Accept": "application/json"}
+
+        if AUTH_TOKEN_VALUE:
+            headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
+
         if self.dataset:
             params += f"&dataset={self.dataset}"
 
         res = httpx.get(
             url=self.route,
             params=params,
-            headers={"Accept": "application/json"},
+            headers=headers,
         )
         if res.status_code == 200:
             self.logger.debug("Fetched %s", _id)
@@ -89,7 +97,7 @@ class KnowledgeBase(object):
     def query_assertions(self,
                          subject: Individual,
                          properties: list[Attribute | Relation],
-                         timeout=KG_DEFAULT_TIMEOUT
+                         timeout=KG_DEFAULT_TIMEOUT,
                          ) -> list[Assertion]:
         """
         Returns specific entity properties
@@ -114,12 +122,17 @@ class KnowledgeBase(object):
         for prop in properties:
             query.add_fetch_clause(predicate=str(prop.id))
 
-        query_dict = query.to_dict(self.version)
+        headers = {"Accept": "application/json"}
+
+        if AUTH_TOKEN_VALUE:
+            headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
+
+        query_dict = query.to_dict(version=self.version)
 
         res = httpx.post(
             url=self.route,
             json=query_dict,
-            headers={"Accept": "application/json"},
+            headers=headers,
             timeout=timeout
         )
 
@@ -146,7 +159,8 @@ class KnowledgeBase(object):
     def search_individuals(self,
                            kinds: list[Concept] = None,
                            constraints: dict[Attribute, Value] = None,
-                           timeout=KG_DEFAULT_TIMEOUT
+                           timeout=KG_DEFAULT_TIMEOUT,
+                           auth_token=None
                            ) -> list[Individual]:
         """
         Retrieves individuals by string search
@@ -171,10 +185,14 @@ class KnowledgeBase(object):
 
         query.add(search_clause)
 
+        headers = {"Accept": "application/json"}
+        if auth_token:
+            headers[AUTH_TOKEN_KEY] = auth_token
+
         res = httpx.post(
             url=self.route,
-            json=query.to_dict(self.version),
-            headers={"Accept": "application/json"},
+            json=query.to_dict(version=self.version),
+            headers=headers,
             timeout=timeout
         )
 
@@ -188,26 +206,32 @@ class KnowledgeBase(object):
     def query_individuals(self,
                           query: UnarySelectQuery,
                           kind: Type[E] = Individual,
-                          timeout=KG_DEFAULT_TIMEOUT
+                          timeout=KG_DEFAULT_TIMEOUT,
                           ) -> list[E]:
         """
 
-        :param query:
-        :param kind:
-        :param timeout:
-        :return:
+
+        :param query: the query
+        :param kind: the kind of individuals to return
+        :param timeout: the request timeout
+        :return: a list of individuals of the specified kind
         """
         start_time = time.time()
 
-        req = query.to_dict(self.version)
+        req = query.to_dict(version=self.version)
 
         if self.dataset and (self.version == "latest" or self.version > "v1.0.0"):
             req['dataset'] = self.dataset
 
+        headers = {"Accept": "application/json"}
+
+        if AUTH_TOKEN_VALUE:
+            headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
+
         res = httpx.post(
             url=self.route,
             json=req,
-            headers={"Accept": "application/json"},
+            headers=headers,
             timeout=timeout
         )
 
@@ -220,13 +244,12 @@ class KnowledgeBase(object):
             self.logger.error("query individuals return code code %d, reason %s", res.status_code, res.text)
         return []
 
-    def upsert_individual(self, individual: Individual, auth_token=None) -> bool:
+    def upsert_individual(self, individual: Individual) -> bool:
         """
         Updates an individual or insert it if not present; existing properties are preserved
 
         :param individual: the individual
-        :param assetions: assertions to be updated
-        :param auth_token:
+
         :return:
         """
         if individual.need_update():
@@ -241,8 +264,8 @@ class KnowledgeBase(object):
 
             headers = {"Accept": "application/json"}
 
-            if auth_token:
-                headers["Authorization"] = f'Bearer {auth_token}'
+            if AUTH_TOKEN_VALUE:
+                headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
 
             try:
                 res = httpx.patch(
@@ -261,8 +284,7 @@ class KnowledgeBase(object):
             except Exception as e:
                 raise e
         else:
-            self.logger.debug("Individual %s doesn't need update", individual.id)
+            self.logger.warning("Individual %s doesn't need update", individual.id)
 
-
-    def delete_individual(self, _id: Reference, auth_key=None):
+    def delete_individual(self, _id: Reference, auth_token=None):
         pass

@@ -4,15 +4,15 @@
     (c) Isagog S.r.l. 2024, MIT License
 """
 from __future__ import annotations
+
 import logging
 import random
 import re
 from enum import Enum
 from typing import Protocol
 from urllib.parse import urlparse
-from rdflib import RDF, RDFS, OWL, URIRef
 
-from isagog.model.kg_model import Assertion
+from rdflib import RDF, RDFS, OWL, URIRef
 
 DEFAULT_PREFIXES = [("rdf", "http://www.w3.org/2000/01/rdf-schema"),
                     ("rdfs", "http://www.w3.org/2001/XMLSchema"),
@@ -552,18 +552,10 @@ class SelectQuery(object):
     def has_return_vars(self) -> bool:
         return len(self.project_vars()) > 0
 
-    # def to_sparql(self) -> str:
-    #     """
-    #     This method is deprecated and will be removed in a future version.
-    #
-    #     Use generate_query with a SPARQL generator instead.
-    #     """
-    #     raise NotImplementedError()
-
     def generate(self, generator: Generator) -> str:
         return generator.generate_query(self)
 
-    def to_dict(self, version: str = None) -> dict:
+    def to_dict(self, **kwargs) -> dict:
         pass
 
 
@@ -717,20 +709,13 @@ class UnarySelectQuery(SelectQuery):
         except Exception as e:
             raise ValueError(f"Malformed query due to: {e}")
 
-    # def to_sparql(self) -> str:
-    #     """
-    #     Deprecated
-    #     :return:
-    #
-    #     """
-    #     from isagog.generator.sparql_generator import _SPARQLGEN
-    #
-    #     return _SPARQLGEN.generate_query(self)
-
-    def to_dict(self, version=None) -> dict:
+    def to_dict(self, **kwargs) -> dict:
 
         out = {}
-        if version is None or version > "1.0.0":
+
+        version = kwargs.get('version')
+
+        if not version or version > "1.0.0":
             out['subject'] = self.subject
 
         out['clauses'] = [c.to_dict(version=version) for c in self.clauses]
