@@ -89,14 +89,18 @@ class Entity(object):
     def __hash__(self):
         return self.id.__hash__()
 
-    def to_dict(self, serializer: Callable[..., Dict] = None) -> dict:
+    def to_dict(self, **kwargs) -> dict:
         """
         Converts the entity to a json serializable dictionary
         :param serializer:
         :param kwargs:
         :return:
         """
-        if not serializer:
+        if 'serializer' in kwargs:
+            serializer = kwargs.get('serializer')
+            if not isinstance(serializer, Callable):
+                raise ValueError("bad serializer")
+        else:
             serializer = _todict
         return serializer(self)
 
@@ -195,12 +199,22 @@ class Assertion(object):
         self.predicate = str(predicate).strip("<>")
         self.subject = str(subject).strip("<>") if subject else None
         self.values = list(values) if values else list()
-
-    def to_dict(self) -> dict:
-        return _todict(self)
+        if 'label' in kwargs:
+            self.label = kwargs.get('label')
+        if 'comment' in kwargs:
+            self.comment = kwargs.get('comment')
 
     def is_empty(self) -> bool:
         return not self.values
+
+    def to_dict(self, **kwargs) -> dict:
+        if 'serializer' in kwargs:
+            serializer = kwargs.get('serializer')
+            if not isinstance(serializer, Callable):
+                raise ValueError("bad serializer")
+        else:
+            serializer = _todict
+        return serializer(self)
 
 
 class Ontology(Graph):
@@ -372,6 +386,20 @@ class AttributeInstance(Assertion):
         else:
             return default
 
+    def to_dict(self, **kwargs) -> dict:
+        nested = kwargs.get('nested', False)
+        rt = {}
+        if nested:
+            rt["id"] = self.predicate
+            if hasattr(self, 'label'):
+                rt['label'] = self.label
+            if hasattr(self, 'type'):
+                rt['type'] = self.type
+            rt['values'] = self.values
+        else:
+            return super().to_dict()
+        return rt
+
 
 VOID_ATTRIBUTE = AttributeInstance(predicate='https://isagog.com/attribute#void')
 
@@ -381,7 +409,8 @@ class RelationInstance(Assertion):
     Relational assertion
     """
 
-    def __init__(self, predicate: Reference = None,
+    def __init__(self,
+                 predicate: Reference = None,
                  subject: Reference = None,
                  values: list[Any | Reference | dict] = None,
                  **kwargs):
@@ -394,15 +423,19 @@ class RelationInstance(Assertion):
         """
         if values:
             specimen = values[0]
-            if isinstance(specimen, (Individual, Reference)):
-                # values are acceptable
+            if isinstance(specimen, Individual):
                 pass
+            elif isinstance(specimen, Reference):
+                # values are references, convert them to Individuals
+                inst_values = [Individual(_id=r_data) for r_data in values]
+                values = inst_values
             elif isinstance(specimen, dict):
                 # if values are dictionaries, then convert them to Individuals
                 inst_values = [Individual(_id=r_data.get('id'), **r_data) for r_data in values]
                 values = inst_values
             else:
                 raise ValueError("bad values for relational assertion")
+
         super().__init__(predicate=predicate,
                          subject=subject,
                          values=values,
@@ -441,6 +474,21 @@ class RelationInstance(Assertion):
                 kind_map[kind].append(individual)
         return kind_map
 
+    def to_dict(self, **kwargs) -> dict:
+
+        nested = kwargs.get('nested', False)
+        rt = {}
+        if nested:
+            rt["id"] = self.predicate
+            if hasattr(self, 'label'):
+                rt['label'] = self.label
+            if hasattr(self, 'type'):
+                rt['type'] = self.type
+            rt['values'] = [ind.to_dict(nested=True) for ind in self.values]
+        else:
+            rt = super().to_dict()
+        return rt
+
 
 VOID_RELATION = RelationInstance(predicate='https://isagog.com/relation#void')
 
@@ -451,18 +499,29 @@ class Individual(Entity):
 
     """
 
-    def __init__(self, _id: Reference,
+    def __init__(self,
+                 _id: Reference,
+                 kind: Reference | list[Reference] = None,
+                 label: str = None,
+                 comment: str = None,
                  attributes: list[AttributeInstance | dict] = None,
                  relations: list[RelationInstance | dict] = None,
-                 **kwargs):
+                 **kwargs
+                 ):
         """
 
         :param _id: the individual identifier
+        :param kind: the individual kind(s)
+        :param label: the distinguished attribute 'label'
+        :param comment: the distinguished attribute 'comment'
         :param attributes: the individual attributes
         :param relations: the individual relations
         :param kwargs:
         """
         super().__init__(_id, owl=OWL.NamedIndividual, **kwargs)
+        self.kind = list(kind) if kind else [OWL.Thing]
+        self.label = label if label else _uri_label(_id)
+        self.comment = comment if comment else None
         self.attributes = list()
         self.relations = list()
         if attributes:
@@ -614,3 +673,16 @@ class Individual(Entity):
 
     def updated(self):
         self._refresh = False
+
+    def to_dict(self, **kwargs) -> dict:
+        nested = kwargs.get('nested', False)
+        if nested:
+            rt = {
+                "id": self.id,
+                "kind": [k for k in self.kind],
+                "label": self.label,
+                "comment": self.comment,
+            }
+        else:
+            rt = super().to_dict()
+        return rt
