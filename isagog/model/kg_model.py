@@ -161,7 +161,7 @@ class Assertion(object):
     def __init__(self,
                  predicate: Reference = None,
                  subject: Reference = None,
-                 values: list = None,
+                 values: set = None,
                  **kwargs):
         """
 
@@ -177,7 +177,7 @@ class Assertion(object):
 
         self.predicate = str(predicate).strip("<>")
         self.subject = str(subject).strip("<>") if subject else None
-        self.values = values if values else []
+        self.values = list(values) if values else list()
 
     def to_dict(self) -> dict:
         return _todict(self)
@@ -202,8 +202,7 @@ class Ontology(Graph):
             self,
             source: IO[bytes] | TextIO | str,
             publicIRI: str,
-            source_format="turtle",
-            **kwargs
+            source_format="turtle"
     ):
         """
         :param source:  Path to the ontology source file.
@@ -356,7 +355,7 @@ class AttributeInstance(Assertion):
             return default
 
 
-VOID_ATTRIBUTE = AttributeInstance(predicate='http://isagog.com/attribute#void')
+VOID_ATTRIBUTE = AttributeInstance(predicate='https://isagog.com/attribute#void')
 
 
 class RelationInstance(Assertion):
@@ -425,7 +424,7 @@ class RelationInstance(Assertion):
         return kind_map
 
 
-VOID_RELATION = RelationInstance(predicate='http://isagog.com/relation#void')
+VOID_RELATION = RelationInstance(predicate='https://isagog.com/relation#void')
 
 
 class Individual(Entity):
@@ -446,8 +445,8 @@ class Individual(Entity):
         :param kwargs:
         """
         super().__init__(_id, owl=OWL.NamedIndividual, **kwargs)
-        self.attributes = []
-        self.relations = []
+        self.attributes = list()
+        self.relations = list()
         # self.label = kwargs.get('label', _uri_label(self.id))
         # self.add_attribute(AttributeInstance(predicate=RDFS.label, values=[self.label]))
         #
@@ -567,7 +566,7 @@ class Individual(Entity):
             if not existing or existing.is_empty():
                 self.attributes.append(instance)
             else:
-                existing.values.extend(instance.values)
+                existing.values.extend([value for value in instance.values if value not in existing.values])
         else:
             if not predicate:
                 raise ValueError("missing property")
@@ -598,7 +597,7 @@ class Individual(Entity):
             if not existing or existing.is_empty():
                 self.relations.append(instance)
             else:
-                existing.values.extend(instance.values)
+                existing.values.extend([value for value in instance.values if value not in existing.values])
             self._refresh = True
         else:
             if not predicate:
