@@ -3,7 +3,7 @@
     (c) Isagog S.r.l. 2024, MIT License
 """
 import logging
-from typing import IO, TextIO, Any
+from typing import IO, TextIO, Any, Callable, Dict
 
 from rdflib import OWL, Graph, RDF, URIRef, RDFS
 
@@ -89,8 +89,16 @@ class Entity(object):
     def __hash__(self):
         return self.id.__hash__()
 
-    def to_dict(self) -> dict:
-        return _todict(self)
+    def to_dict(self, serializer: Callable[..., Dict] = None) -> dict:
+        """
+        Converts the entity to a json serializable dictionary
+        :param serializer:
+        :param kwargs:
+        :return:
+        """
+        if not serializer:
+            serializer = _todict
+        return serializer(self)
 
 
 class Concept(Entity):
