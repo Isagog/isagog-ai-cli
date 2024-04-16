@@ -468,7 +468,7 @@ class Individual(Entity):
                 if isinstance(relation, dict):
                     relation = RelationInstance(**relation)
                 self.add_relation(instance=relation)
-        if 'score' in kwargs:
+        if 'score' in kwargs and kwargs.get('score'):
             self.score = float(kwargs.get('score'))
         if self.has_attribute(PROFILE_ATTRIBUTE):
             self.profile = {
