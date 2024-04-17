@@ -100,6 +100,16 @@ class Entity(object):
             serializer = kwargs.get('serializer')
             if not isinstance(serializer, Callable):
                 raise ValueError("bad serializer")
+        elif 'format' in kwargs:
+            if kwargs.get('format') == 'api':
+                rt = {
+                    "id": self.id,
+                }
+                if hasattr(self, '__meta__'):
+                    rt['meta'] = self.__meta__
+                return rt
+            else:
+                serializer = _todict
         else:
             serializer = _todict
         return serializer(self)
@@ -212,6 +222,20 @@ class Assertion(object):
             serializer = kwargs.get('serializer')
             if not isinstance(serializer, Callable):
                 raise ValueError("bad serializer")
+        elif 'format' in kwargs:
+            if kwargs.get('format') == 'api':
+                rt = {
+                    "id": self.predicate,
+                    "subject": self.subject,
+                    "values": self.values
+                }
+                if hasattr(self, 'label'):
+                    rt['label'] = self.label
+                if hasattr(self, 'comment'):
+                    rt['comment'] = self.comment
+                return rt
+            else:
+                serializer = _todict
         else:
             serializer = _todict
         return serializer(self)
@@ -387,9 +411,8 @@ class AttributeInstance(Assertion):
             return default
 
     def to_dict(self, **kwargs) -> dict:
-        nested = kwargs.get('nested', False)
         rt = {}
-        if nested:
+        if 'format' in kwargs and kwargs.get('format') == 'api':
             rt["id"] = self.predicate
             if hasattr(self, 'label'):
                 rt['label'] = self.label
@@ -476,9 +499,8 @@ class RelationInstance(Assertion):
 
     def to_dict(self, **kwargs) -> dict:
 
-        nested = kwargs.get('nested', False)
         rt = {}
-        if nested:
+        if 'format' in kwargs and kwargs.get('format') == 'api':
             rt["id"] = self.predicate
             if hasattr(self, 'label'):
                 rt['label'] = self.label
@@ -675,7 +697,7 @@ class Individual(Entity):
         self._refresh = False
 
     def to_dict(self, **kwargs) -> dict:
-        nested = kwargs.get('nested', False)
+        nested = bool(kwargs.get('nested', False))
         if nested:
             rt = {
                 "id": self.id,
