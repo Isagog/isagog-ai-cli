@@ -24,6 +24,9 @@ class Identifier(str):
         )
         return re.match(pattern, _id)
 
+    def n3(self):
+        return f"<{self}>"
+
 
 Reference = URIRef | Identifier
 
