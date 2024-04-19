@@ -658,12 +658,39 @@ class UnarySelectQuery(SelectQuery):
                 kind_union.add_atom(property=RDF_TYPE, argument=Identifier(kind), method=Comparison.EXACT)
             self.add(kind_union)
 
-    def add_match_clause(self, predicate, argument, method=Comparison.EXACT, project=False, optional=False):
+    def add_match_clause(self,
+                         predicate: Identifier,
+                         argument: str | int | float | Value | Identifier,
+                         method=Comparison.EXACT,
+                         project=False,
+                         optional=False):
+        """
+        Adds a match atomic clause
+        :param predicate: the predicate to query
+        :param argument: the argument to match
+        :param method: the comparison method
+        :param project: whether to project the result
+        :param optional: whether the clause is optional
+        :return:
+        """
         self.add(
             AtomicClause(property=predicate, argument=argument, method=method, project=project, optional=optional))
 
-    def add_fetch_clause(self, predicate):
-        self.add(AtomicClause(property=predicate, method=Comparison.ANY, project=True, optional=True))
+    def add_fetch_clause(self,
+                         predicate: Identifier,
+                         variable: Variable = None):
+        """
+        Adds a fetch atomic clause
+        :param predicate: the predicate to query
+        :param variable: the projected variable
+        :return:
+        """
+        self.add(
+            AtomicClause(property=predicate,
+                         variable=variable if variable else Variable(),
+                         method=Comparison.ANY,
+                         project=True,
+                         optional=True))
 
     def from_dict(self, data: dict):
         """
