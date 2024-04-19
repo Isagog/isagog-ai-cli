@@ -7,13 +7,29 @@ from typing import IO, TextIO, Any, Callable, Dict
 
 from rdflib import OWL, Graph, RDF, URIRef, RDFS
 
-# Type definitions
+import re
 
-Reference = URIRef | str
+
+class Identifier(str):
+    def __new__(cls, _id):
+        if not cls.is_valid_id(_id):
+            raise ValueError(f"Invalid ID format: {_id}")
+        return str.__new__(cls, _id)
+
+    @staticmethod
+    def is_valid_id(_id):
+        pattern = re.compile(
+            r'^[a-zA-Z][a-zA-Z0-9+.-]*:'  # Scheme: Any valid URI scheme
+            r'[a-zA-Z0-9-._~:/?#\[\]@!$&\'()*+,;=%]*$'  # Path: Any valid URI character
+        )
+        return re.match(pattern, _id)
+
+
+Reference = URIRef | Identifier
 
 OWL_ENTITY_TYPES = [OWL.Class, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.AnnotationProperty]
 
-PROFILE_ATTRIBUTE = "https://isagog.com/ontology#profile"
+PROFILE_ATTRIBUTE = Identifier("http://isagog.com/ontology#profile")
 
 
 def _uri_label(uri: str) -> str:
@@ -53,6 +69,7 @@ def _todict(obj, classkey=None):
             data[classkey] = obj.__class__.__name__
         return data
     else:
+        # can't convert to dict
         return obj
 
 
@@ -69,7 +86,15 @@ class Entity(object):
         :param kwargs:
         """
         assert _id
-        self.id = str(_id).strip("<>")
+        if isinstance(_id, URIRef):
+            _id = Identifier(str(_id))
+        elif isinstance(_id, Identifier):
+            pass
+        elif isinstance(_id, str):
+            _id = Identifier(_id)
+        else:
+            raise ValueError("bad id object")
+        self.id = _id  # str(_id).strip("<>")
         owl_type = kwargs.get('owl')
         if owl_type:
             if owl_type in OWL_ENTITY_TYPES:
@@ -91,10 +116,11 @@ class Entity(object):
 
     def to_dict(self, **kwargs) -> dict:
         """
-        Converts the entity to a json serializable dictionary
-        :param serializer:
-        :param kwargs:
-        :return:
+        Converts the entity to a json serializable dictionary.
+        :param kwargs: format (a string to specify the output format, 'api' for API output,
+                               default: object to dict conversion)
+                       serializer (a custom function to use for serialization, overrides format if present)
+        :return: a serializable dictionary representation of the entity
         """
         if 'serializer' in kwargs:
             serializer = kwargs.get('serializer')
@@ -411,6 +437,8 @@ class AttributeInstance(Assertion):
             return default
 
     def to_dict(self, **kwargs) -> dict:
+        if 'serializer' in kwargs:
+            return super().to_dict(serializer=kwargs.get('serializer'))
         rt = {}
         if 'format' in kwargs and kwargs.get('format') == 'api':
             rt["id"] = self.predicate
@@ -424,7 +452,7 @@ class AttributeInstance(Assertion):
         return rt
 
 
-VOID_ATTRIBUTE = AttributeInstance(predicate='https://isagog.com/attribute#void')
+VOID_ATTRIBUTE = AttributeInstance(predicate='http://isagog.com/attribute#void')
 
 
 class RelationInstance(Assertion):
@@ -498,21 +526,26 @@ class RelationInstance(Assertion):
         return kind_map
 
     def to_dict(self, **kwargs) -> dict:
-
+        if 'serializer' in kwargs:
+            return super().to_dict(serializer=kwargs.get('serializer'))
         rt = {}
-        if 'format' in kwargs and kwargs.get('format') == 'api':
-            rt["id"] = self.predicate
-            if hasattr(self, 'label'):
-                rt['label'] = self.label
-            if hasattr(self, 'type'):
-                rt['type'] = self.type
-            rt['values'] = [ind.to_dict(nested=True) for ind in self.values]
+        if 'format' in kwargs:
+            if kwargs.get('format') == 'api':
+                rt["id"] = str(self.predicate)
+                if hasattr(self, 'label'):
+                    rt['label'] = str(self.label)
+                if hasattr(self, 'type'):
+                    rt['type'] = str(self.type)
+                rt['values'] = [ind.to_dict(format='api') for ind in self.values]
+            else:
+                logging.warning("unknown format %s", kwargs.get('format'))
+                rt = super().to_dict()
         else:
             rt = super().to_dict()
         return rt
 
 
-VOID_RELATION = RelationInstance(predicate='https://isagog.com/relation#void')
+VOID_RELATION = RelationInstance(predicate='http://isagog.com/relation#void')
 
 
 class Individual(Entity):
@@ -618,19 +651,32 @@ class Individual(Entity):
         return self.attributes + self.relations
 
     def set_score(self, score: float):
+        """
+        Sets the individual score, i.e. the relevance of the individual in a given context (e.g. a search result)
+        :param score:
+        :return:
+        """
         self.score = score
 
     def get_score(self) -> float | None:
+        """
+        Gets the individual score, i.e. the relevance of the individual in a given context (e.g. a search result)
+        :return:
+        """
         if hasattr(self, 'score'):
             return self.score
         else:
             return None
 
     def has_score(self) -> bool:
+        """
+        Tells if the individual has a score
+        :return:
+        """
         return hasattr(self, 'score')
 
     def add_attribute(self,
-                      predicate: Reference | str = None,
+                      predicate: Reference = None,
                       values: list[str | int | float | bool] = None,
                       instance: AttributeInstance = None):
         """
@@ -654,7 +700,7 @@ class Individual(Entity):
         else:
             if not predicate:
                 raise ValueError("missing property")
-            if not isinstance(predicate, (Reference, str)):
+            if not isinstance(predicate, Reference):
                 raise ValueError("bad property")
             self.add_attribute(instance=AttributeInstance(predicate=predicate, values=values))
         self._refresh = True
@@ -697,14 +743,27 @@ class Individual(Entity):
         self._refresh = False
 
     def to_dict(self, **kwargs) -> dict:
-        nested = bool(kwargs.get('nested', False))
-        if nested:
-            rt = {
-                "id": self.id,
-                "kind": [k for k in self.kind],
-                "label": self.label,
-                "comment": self.comment,
-            }
+        if 'serializer' in kwargs:
+            return super().to_dict(serializer=kwargs.get('serializer'))
+        rt = {}
+        if 'format' in kwargs:
+            if kwargs.get('format') == 'api':
+                rt['id'] = str(self.id)
+                if self.kind:
+                    rt['kind'] = [str(k) for k in self.kind],  # [str(c.id) for c in self.get_kind()],
+                if self.label:
+                    rt['label'] = self.label
+                if self.comment:
+                    rt['comment'] = self.comment
+                if self.attributes:
+                    rt['attributes'] = [att.to_dict(format='api') for att in self.attributes]
+                if self.relations:
+                    rt['relations'] = [rel.to_dict(format='api') for rel in self.relations]
+                if hasattr(self, 'score'):
+                    rt['score'] = self.score
+            else:
+                logging.warning("unknown format %s", kwargs.get('format'))
+                rt = super().to_dict()
         else:
             rt = super().to_dict()
         return rt
