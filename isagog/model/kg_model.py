@@ -13,7 +13,7 @@ import re
 class Identifier(str):
     def __new__(cls, _id):
         if not cls.is_valid_id(_id):
-            raise ValueError(f"Invalid ID format: {_id}")
+            raise ValueError(f"Invalid identifier: {_id}")
         return str.__new__(cls, _id)
 
     @staticmethod
@@ -676,9 +676,9 @@ class Individual(Entity):
         return hasattr(self, 'score')
 
     def add_attribute(self,
+                      instance: AttributeInstance = None,
                       predicate: Reference = None,
-                      values: list[str | int | float | bool] = None,
-                      instance: AttributeInstance = None):
+                      values: list[str | int | float | bool] = None):
         """
         Adds an attribute to the individual
         One of predicate or instance must be provided (but not both: in that case, instance is preferred)
@@ -699,16 +699,16 @@ class Individual(Entity):
                 existing.values.extend([value for value in instance.values if value not in existing.values])
         else:
             if not predicate:
-                raise ValueError("missing property")
+                raise ValueError("missing predicate")
             if not isinstance(predicate, Reference):
-                raise ValueError("bad property")
+                predicate = Identifier(predicate)
             self.add_attribute(instance=AttributeInstance(predicate=predicate, values=values))
         self._refresh = True
 
     def add_relation(self,
-                     predicate: Reference | str = None,
-                     values: list[Reference | str] = None,
-                     instance: RelationInstance = None):
+                     instance: RelationInstance = None,
+                     predicate: Reference = None,
+                     values: list[Reference] = None):
         """
         Adds a relation to the individual
         One of predicate or instance must be provided (but not both: in that case, instance is preferred)
@@ -732,8 +732,8 @@ class Individual(Entity):
         else:
             if not predicate:
                 raise ValueError("missing property")
-            if not isinstance(predicate, (Reference, str)):
-                raise ValueError("bad property")
+            if not isinstance(predicate, Reference):
+                predicate = Identifier(predicate)
             self.add_relation(instance=RelationInstance(predicate=predicate, values=values))
 
     def need_update(self):
