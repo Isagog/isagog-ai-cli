@@ -149,7 +149,8 @@ class KnowledgeBase(object):
                         record = next(item for item in res_attrib_list if item['id'] == _prop)
                         return record.get('values', OSError("malformed response"))
                     except StopIteration:
-                        raise OSError("incomplete response: %s not found", _prop)
+                        #raise OSError("incomplete response: %s not found", _prop)
+                        return None
 
                 return [Assertion(predicate=prop, values=__get_values(prop)) for prop in properties]
         else:
