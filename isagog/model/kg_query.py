@@ -541,12 +541,8 @@ class SelectQuery(object):
     def project_clauses(self) -> list[AtomicClause]:
         return [c for c in self.clauses if isinstance(c, AtomicClause) and c.project]
 
-    def project_vars(self) -> set[str]:
-        """
-        Selects all the projectes arguments
-        """
-        _vars = []
-        for c in self.clauses:
+    def _project_vars(self, c: Clause, _vars: list[str]):
+        if isinstance(c, AtomicClause) and c.project:
             if isinstance(c, AtomicClause) and c.project:
                 if c.variable and not c.argument:
                     _vars.append(c.variable)
@@ -554,6 +550,17 @@ class SelectQuery(object):
                     _vars.append(c.argument)
                 if isinstance(c.subject, Variable):
                     _vars.append(c.subject)
+        elif isinstance(c, ConjunctiveClause) or isinstance(c, DisjunctiveClause):
+            for c in c.clauses:
+                self._project_vars(c, _vars)
+
+    def project_vars(self) -> set[str]:
+        """
+        Selects all the projectes arguments
+        """
+        _vars = []
+        for c in self.clauses:
+            self._project_vars(c, _vars)
         return set(_vars)
 
     def has_return_vars(self) -> bool:
