@@ -63,7 +63,7 @@ class SPARQLGenerator(Generator):
                 if clause.optional:
                     strio.write("OPTIONAL")
                 strio.write("\t{\n")
-                for sub_clause in clause.clauses[1:]:
+                for sub_clause in clause.clauses: #[1:]:
                     strio.write("\t\t\t" + self.generate_clause(sub_clause))  # sub_clause.to_sparql())
                 strio.write("\t\t}\n")
                 # strio.write("\t}\n")

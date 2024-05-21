@@ -624,10 +624,19 @@ class UnarySelectQuery(SelectQuery):
                                   project=True))
             self.add_kinds(kinds)
 
+    def _fix_subject(self, clause: Clause):
+        if isinstance(clause, AtomicClause) and clause.subject is None:
+            clause.subject = self.subject
+        elif isinstance(clause, ConjunctiveClause) or isinstance(clause, DisjunctiveClause):
+            for c in clause.clauses:
+                self._fix_subject(c)
+
     def add(self, clauses: Clause | list[Clause], **kwargs):
         if isinstance(clauses, Clause):
-            if clauses.subject is None:
-                clauses.subject = self.subject
+            self._fix_subject(clauses)
+        elif isinstance(clauses, list):
+            for c in clauses:
+                self._fix_subject(c)
         super().add(clauses, **kwargs)
 
     def clause(self,
