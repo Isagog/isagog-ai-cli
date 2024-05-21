@@ -106,7 +106,10 @@ class SPARQLGenerator(Generator):
 
         strio = StringIO()
         for (name, uri) in query.prefixes:
-            strio.write(f"PREFIX {name}: <{uri}#>\n")
+            if uri.endswith("#") or uri.endswith("/"):
+                strio.write(f"PREFIX {name}: <{uri}>\n")
+            else:
+                strio.write(f"PREFIX {name}: <{uri}#>\n")
 
         strio.write("SELECT distinct ")  # {query.subject}")
         for rv in query.project_vars():

@@ -486,6 +486,9 @@ class SelectQuery(object):
         self.lang = lang
         self.min_score = min_score
 
+    def add_prefix(self, prefix: str, uri: str):
+        self.prefixes.append((prefix, uri))
+
     def add(self, clauses: Clause | list[Clause], **kwargs):
         if isinstance(clauses, list):
             match kwargs.get('type', 'conjunction'):
@@ -699,6 +702,8 @@ class UnarySelectQuery(SelectQuery):
         try:
             for key, val in data.items():
                 match key:
+                    case 'prefixes':
+                        self.prefixes = val
                     case 'subject':
                         self.subject = self._new_id(val)
                     case 'kind' | 'kinds':  # backward compatibility w 0.7
