@@ -753,7 +753,7 @@ class UnarySelectQuery(SelectQuery):
 
         if not version or version > "1.0.0":
             out['subject'] = self.subject
-
+        out['prefixes'] = self.prefixes
         out['clauses'] = [c.to_dict(version=version) for c in self.clauses]
         out['graph'] = self.graph
         out['limit'] = self.limit
