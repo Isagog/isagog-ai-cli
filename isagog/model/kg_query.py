@@ -538,8 +538,18 @@ class SelectQuery(object):
         self.add(atomic_clause)
         return self
 
+    def _project_clauses(self, c: Clause, _clauses: list[AtomicClause]):
+        if isinstance(c, AtomicClause) and c.project:
+            _clauses.append(c)
+        elif isinstance(c, ConjunctiveClause) or isinstance(c, DisjunctiveClause):
+            for sc in c.clauses:
+                self._project_clauses(sc, _clauses)
+
     def project_clauses(self) -> list[AtomicClause]:
-        return [c for c in self.clauses if isinstance(c, AtomicClause) and c.project]
+        project_clauses = []
+        for c in self.clauses:
+            self._project_clauses(c, project_clauses)
+        return project_clauses
 
     def _project_vars(self, c: Clause, _vars: list[str]):
         if isinstance(c, AtomicClause) and c.project:
@@ -652,7 +662,7 @@ class UnarySelectQuery(SelectQuery):
                argument: str | int | float | Value | Identifier | Variable = None,
                variable: Variable | str = None,
                method: Comparison = Comparison.ANY,
-               project=True,
+               project=False,
                optional=False) -> SelectQuery:
         if subject is None:
             subject = self.subject
