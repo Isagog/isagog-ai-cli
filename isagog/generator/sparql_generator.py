@@ -6,7 +6,7 @@ from io import StringIO
 
 from isagog.model.kg_model import Assertion
 from isagog.model.kg_query import UnarySelectQuery, AtomicClause, Comparison, Variable, \
-    ConjunctiveClause, DisjunctiveClause, _SCOREVAR, SelectQuery
+    ConjunctiveClause, DisjunctiveClause, _SCOREVAR, SelectQuery, META_PROPERTIES
 from isagog.model.kg_query import Generator, Clause
 
 
@@ -23,6 +23,9 @@ class SPARQLGenerator(Generator):
             """
             if not clause.is_defined():
                 raise ValueError(f"Clause not defined {clause.subject} {clause.property} {clause.argument}")
+
+            if str(clause.property) == META_PROPERTIES.IN.value:
+                return f"FILTER ({clause.subject} IN ({clause.argument})) .\n"
 
             clause_str = ""
 

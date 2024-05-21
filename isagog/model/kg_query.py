@@ -24,6 +24,10 @@ _KINDVAR = 'k'
 _SCOREVAR = 'score'
 
 
+class META_PROPERTIES(Enum):
+    IN = "IN"
+
+
 def is_uri(string: str) -> bool:
     parsed = urlparse(string)
     return bool(parsed.scheme) and bool(parsed.netloc)
