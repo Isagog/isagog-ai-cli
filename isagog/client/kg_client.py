@@ -176,20 +176,20 @@ class KnowledgeBase(object):
                 return []
         except httpx.ConnectError:
             self.logger.error("Failed to connect to the host %s.", self.route)
-            return None
+            return []
         except httpx.RequestError as exc:
             self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
-            return None
+            return []
         except httpx.TimeoutException:
             self.logger.error("The request timed out from %s.", self.route)
-            return None
+            return []
         except httpx.HTTPStatusError as exc:
             self.logger.error(
                 f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
-            return None
+            return []
         except Exception as exc:
             self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
-            return None
+            return []
 
     def search_individuals(self,
                            kinds: list[Concept] = None,
@@ -238,20 +238,20 @@ class KnowledgeBase(object):
             return entities
         except httpx.ConnectError:
             self.logger.error("Failed to connect to the host %s.", self.route)
-            return None
+            return []
         except httpx.RequestError as exc:
             self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
-            return None
+            return []
         except httpx.TimeoutException:
             self.logger.error("The request timed out from %s.", self.route)
-            return None
+            return []
         except httpx.HTTPStatusError as exc:
             self.logger.error(
                 f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
-            return None
+            return []
         except Exception as exc:
             self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
-            return None
+            return []
 
     def query_individuals(self,
                           query: UnarySelectQuery,
