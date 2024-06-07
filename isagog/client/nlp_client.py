@@ -99,23 +99,39 @@ class LanguageProcessor(object):
 
         if AUTH_TOKEN_VALUE:
             headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
-
-        res = httpx.post(
-            url=self.route + "/analyze",
-            json={
-                "text": text,
-                "tasks": ["keyword"],
-                "keyword_number": number
-            },
-            headers=headers,
-            timeout=timeout
-        )
-        if res.status_code == 200:
-            res_dict = res.json()
-            words = [kwr[0] for kwr in res_dict["keyword"]]
-            return words
-        else:
-            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.text)
+        try:
+            res = httpx.post(
+                url=self.route + "/analyze",
+                json={
+                    "text": text,
+                    "tasks": ["keyword"],
+                    "keyword_number": number
+                },
+                headers=headers,
+                timeout=timeout
+            )
+            if res.status_code == 200:
+                res_dict = res.json()
+                words = [kwr[0] for kwr in res_dict["keyword"]]
+                return words
+            else:
+                self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.text)
+                return []
+        except httpx.ConnectError:
+            self.logger.error("Failed to connect to the host %s.", self.route)
+            return []
+        except httpx.RequestError as exc:
+            self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
+            return []
+        except httpx.TimeoutException:
+            self.logger.error("The request timed out from %s.", self.route)
+            return []
+        except httpx.HTTPStatusError as exc:
+            self.logger.error(
+                f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
+            return []
+        except Exception as exc:
+            self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
             return []
 
     def extract_words(self,
@@ -138,21 +154,38 @@ class LanguageProcessor(object):
         if AUTH_TOKEN_VALUE:
             headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
 
-        res = httpx.post(
-            url=self.route + "/analyze",
-            json={
-                "text": text,
-                "tasks": ["word"]
-            },
-            headers=headers,
-            timeout=timeout
-        )
-        if res.status_code == 200:
-            res_dict = res.json()
-            words = [Word(**{k: v for k, v in r.items() if k in Word._fields}) for r in res_dict["words"]]
-            return [w.text for w in words if w.pos in filter_pos]
-        else:
-            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.text)
+        try:
+            res = httpx.post(
+                url=self.route + "/analyze",
+                json={
+                    "text": text,
+                    "tasks": ["word"]
+                },
+                headers=headers,
+                timeout=timeout
+            )
+            if res.status_code == 200:
+                res_dict = res.json()
+                words = [Word(**{k: v for k, v in r.items() if k in Word._fields}) for r in res_dict["words"]]
+                return [w.text for w in words if w.pos in filter_pos]
+            else:
+                self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.text)
+                return []
+        except httpx.ConnectError:
+            self.logger.error("Failed to connect to the host %s.", self.route)
+            return []
+        except httpx.RequestError as exc:
+            self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
+            return []
+        except httpx.TimeoutException:
+            self.logger.error("The request timed out from %s.", self.route)
+            return []
+        except httpx.HTTPStatusError as exc:
+            self.logger.error(
+                f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
+            return []
+        except Exception as exc:
+            self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
             return []
 
     def extract_words_entities(self,
@@ -175,24 +208,42 @@ class LanguageProcessor(object):
         if AUTH_TOKEN_VALUE:
             headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
 
-        res = httpx.post(
-            url=self.route + "/analyze",
-            json={
-                "text": text,
-                "tasks": ["word", "entity"]
-            },
-            headers=headers,
-            timeout=timeout
-        )
+        try:
+            res = httpx.post(
+                url=self.route + "/analyze",
+                json={
+                    "text": text,
+                    "tasks": ["word", "entity"]
+                },
+                headers=headers,
+                timeout=timeout
+            )
 
-        if res.status_code == 200:
-            res_dict = res.json()
-            words = list(filter(lambda w: w.pos in filter_pos,
-                                [Word(**{k: v for k, v in r.items() if k in Word._fields}) for r in res_dict["words"]]))
-            entities = [NamedEntity(**{k: v for k, v in r.items() if k in NamedEntity._fields}) for r in
-                        res_dict["entities"]]
-            return words, entities
+            if res.status_code == 200:
+                res_dict = res.json()
+                words = list(filter(lambda w: w.pos in filter_pos,
+                                    [Word(**{k: v for k, v in r.items() if k in Word._fields}) for r in res_dict["words"]]))
+                entities = [NamedEntity(**{k: v for k, v in r.items() if k in NamedEntity._fields}) for r in
+                            res_dict["entities"]]
+                return words, entities
 
-        else:
-            self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.text)
+            else:
+                self.logger.error("fail to extract from '%s': code=%d, reason=%s", text, res.status_code, res.text)
+                return [], []
+        except httpx.ConnectError:
+            self.logger.error("Failed to connect to the host %s.", self.route)
             return [], []
+        except httpx.RequestError as exc:
+            self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
+            return [], []
+        except httpx.TimeoutException:
+            self.logger.error("The request timed out from %s.", self.route)
+            return [], []
+        except httpx.HTTPStatusError as exc:
+            self.logger.error(
+                f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
+            return [], []
+        except Exception as exc:
+            self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
+            return [], []
+

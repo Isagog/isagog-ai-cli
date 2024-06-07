@@ -81,17 +81,34 @@ class KnowledgeBase(object):
 
         if self.dataset:
             params += f"&dataset={self.dataset}"
-
-        res = httpx.get(
-            url=self.route,
-            params=params,
-            headers=headers,
-        )
-        if res.status_code == 200:
-            self.logger.debug("Fetched %s", _id)
-            return entity_type(_id, **res.json())
-        else:
-            self.logger.error("Couldn't fetch %s due to %s", _id, res.text)
+        try:
+            res = httpx.get(
+                url=self.route,
+                params=params,
+                headers=headers,
+            )
+            res.raise_for_status()
+            if res.status_code == 200:
+                self.logger.debug("Fetched %s", _id)
+                return entity_type(_id, **res.json())
+            else:
+                self.logger.error("Couldn't fetch %s due to %s", _id, res.text)
+                return None
+        except httpx.ConnectError:
+            self.logger.error("Failed to connect to the host %s.", self.route)
+            return None
+        except httpx.RequestError as exc:
+            self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
+            return None
+        except httpx.TimeoutException:
+            self.logger.error("The request timed out from %s.", self.route)
+            return None
+        except httpx.HTTPStatusError as exc:
+            self.logger.error(
+                f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
+            return None
+        except Exception as exc:
+            self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
             return None
 
     def query_assertions(self,
@@ -129,33 +146,50 @@ class KnowledgeBase(object):
 
         query_dict = query.to_dict(version=self.version)
 
-        res = httpx.post(
-            url=self.route,
-            json=query_dict,
-            headers=headers,
-            timeout=timeout
-        )
+        try:
+            res = httpx.post(
+                url=self.route,
+                json=query_dict,
+                headers=headers,
+                timeout=timeout
+            )
+            res.raise_for_status()
+            if res.status_code == 200:
+                res_list = res.json()
+                if len(res_list) == 0:
+                    self.logger.warning("Void attribute query")
+                    return []
+                else:
+                    res_attrib_list = res_list[0].get('attributes', OSError("malformed response"))
 
-        if res.status_code == 200:
-            res_list = res.json()
-            if len(res_list) == 0:
-                self.logger.warning("Void attribute query")
-                return []
+                    def __get_values(_prop: str) -> str:
+                        try:
+                            record = next(item for item in res_attrib_list if item['id'] == _prop)
+                            return record.get('values', OSError("malformed response"))
+                        except StopIteration:
+                            # raise OSError("incomplete response: %s not found", _prop)
+                            return None
+
+                    return [Assertion(predicate=prop, values=__get_values(prop)) for prop in properties]
             else:
-                res_attrib_list = res_list[0].get('attributes', OSError("malformed response"))
-
-                def __get_values(_prop: str) -> str:
-                    try:
-                        record = next(item for item in res_attrib_list if item['id'] == _prop)
-                        return record.get('values', OSError("malformed response"))
-                    except StopIteration:
-                        #raise OSError("incomplete response: %s not found", _prop)
-                        return None
-
-                return [Assertion(predicate=prop, values=__get_values(prop)) for prop in properties]
-        else:
-            self.logger.warning("Query of entity %s failed due to %s", subject, res.text)
-            return []
+                self.logger.warning("Query of entity %s failed due to %s", subject, res.text)
+                return []
+        except httpx.ConnectError:
+            self.logger.error("Failed to connect to the host %s.", self.route)
+            return None
+        except httpx.RequestError as exc:
+            self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
+            return None
+        except httpx.TimeoutException:
+            self.logger.error("The request timed out from %s.", self.route)
+            return None
+        except httpx.HTTPStatusError as exc:
+            self.logger.error(
+                f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
+            return None
+        except Exception as exc:
+            self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
+            return None
 
     def search_individuals(self,
                            kinds: list[Concept] = None,
@@ -189,20 +223,35 @@ class KnowledgeBase(object):
         headers = {"Accept": "application/json"}
         if auth_token:
             headers[AUTH_TOKEN_KEY] = auth_token
-
-        res = httpx.post(
-            url=self.route,
-            json=query.to_dict(version=self.version),
-            headers=headers,
-            timeout=timeout
-        )
-
-        if res.status_code == 200:
-            entities.extend([Individual(r.get('id'), **r) for r in res.json()])
-        else:
-            self.logger.error("Search individuals failed: code %d, reason %s", res.status_code, res.text)
-
-        return entities
+        try:
+            res = httpx.post(
+                url=self.route,
+                json=query.to_dict(version=self.version),
+                headers=headers,
+                timeout=timeout
+            )
+            res.raise_for_status()
+            if res.status_code == 200:
+                entities.extend([Individual(r.get('id'), **r) for r in res.json()])
+            else:
+                self.logger.error("Search individuals failed: code %d, reason %s", res.status_code, res.text)
+            return entities
+        except httpx.ConnectError:
+            self.logger.error("Failed to connect to the host %s.", self.route)
+            return None
+        except httpx.RequestError as exc:
+            self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
+            return None
+        except httpx.TimeoutException:
+            self.logger.error("The request timed out from %s.", self.route)
+            return None
+        except httpx.HTTPStatusError as exc:
+            self.logger.error(
+                f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
+            return None
+        except Exception as exc:
+            self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
+            return None
 
     def query_individuals(self,
                           query: UnarySelectQuery,
@@ -228,22 +277,38 @@ class KnowledgeBase(object):
 
         if AUTH_TOKEN_VALUE:
             headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
-
-        res = httpx.post(
-            url=self.route,
-            json=req,
-            headers=headers,
-            timeout=timeout
-        )
-
-        if res.status_code == 200:
-            self.logger.debug("Query individuals done in %d seconds", time.time() - start_time)
-            return [kind(r.get('id'), **r) for r in res.json()]
-        elif res.status_code < 500:
-            self.logger.warning("query individuals return code %d, reason %s", res.status_code, res.text)
-        else:
-            self.logger.error("query individuals return code code %d, reason %s", res.status_code, res.text)
-        return []
+        try:
+            res = httpx.post(
+                url=self.route,
+                json=req,
+                headers=headers,
+                timeout=timeout
+            )
+            res.raise_for_status()
+            if res.status_code == 200:
+                self.logger.debug("Query individuals done in %d seconds", time.time() - start_time)
+                return [kind(r.get('id'), **r) for r in res.json()]
+            elif res.status_code < 500:
+                self.logger.warning("query individuals return code %d, reason %s", res.status_code, res.text)
+            else:
+                self.logger.error("query individuals return code code %d, reason %s", res.status_code, res.text)
+            return []
+        except httpx.ConnectError:
+            self.logger.error("Failed to connect to the host %s.", self.route)
+            return []
+        except httpx.RequestError as exc:
+            self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
+            return []
+        except httpx.TimeoutException:
+            self.logger.error("The request timed out from %s.", self.route)
+            return []
+        except httpx.HTTPStatusError as exc:
+            self.logger.error(
+                f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
+            return []
+        except Exception as exc:
+            self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
+            return []
 
     def upsert_individual(self, individual: Individual) -> bool:
         """
@@ -275,15 +340,30 @@ class KnowledgeBase(object):
                     json=req,
                     headers=headers
                 )
-
+                res.raise_for_status()
                 if res.status_code == 200:
                     individual.updated()
                     return True
                 else:
-                    print(f"upsert failed {res.status_code}")
+                    self.logger.error(f"upsert failed {res.status_code}")
                     return False
-            except Exception as e:
-                raise e
+            except httpx.ConnectError:
+                self.logger.error("Failed to connect to the host %s.", self.route)
+                return False
+            except httpx.RequestError as exc:
+                self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
+                return False
+            except httpx.TimeoutException:
+                self.logger.error("The request timed out from %s.", self.route)
+                return False
+            except httpx.HTTPStatusError as exc:
+                self.logger.error(
+                    f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
+                return False
+            except Exception as exc:
+                self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
+                return False
+
         else:
             self.logger.warning("Individual %s doesn't need update", individual.id)
 
