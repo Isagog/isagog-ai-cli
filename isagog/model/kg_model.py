@@ -215,6 +215,31 @@ class Assertion(BaseModel):
     def is_empty(self) -> bool:
         return not self.values
 
+    @deprecated
+    def to_dict(self, **kwargs) -> dict:
+        if 'serializer' in kwargs:
+            serializer = kwargs.get('serializer')
+            if not isinstance(serializer, Callable):
+                raise ValueError("bad serializer")
+        elif 'format' in kwargs:
+            if kwargs.get('format') == 'api':
+                rt = {
+                    "id": self.predicate,
+                    "subject": self.subject,
+                    "values": self.values
+                }
+                if hasattr(self, 'label'):
+                    rt['label'] = self.label
+                if hasattr(self, 'comment'):
+                    rt['comment'] = self.comment
+                return rt
+            else:
+                serializer = _todict
+        else:
+            serializer = _todict
+        return serializer(self)
+
+
 
 class Ontology(Graph):
     """
