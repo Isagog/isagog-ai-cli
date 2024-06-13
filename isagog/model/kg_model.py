@@ -3,17 +3,13 @@
     (c) Isagog S.r.l. 2024, MIT License
 """
 import logging
-import uuid
-from typing import IO, TextIO, Any, Callable, Dict
-
-from rdflib import OWL, Graph, RDF, URIRef, RDFS
-
 import re
+import uuid
+from typing import IO, TextIO, Any, Callable
 
 from pydantic import BaseModel
+from rdflib import OWL, Graph, RDF, URIRef, RDFS
 from typing_extensions import deprecated
-
-Value = str | int | float | bool
 
 
 class Identifier(str):
@@ -35,6 +31,7 @@ class Identifier(str):
 
 
 Reference = URIRef | Identifier
+Value = str | int | float | bool
 
 OWL_ENTITY_TYPES = [OWL.Class, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.AnnotationProperty]
 
@@ -104,7 +101,6 @@ class Entity(BaseModel):
     def __hash__(self):
         return self.id.__hash__()
 
-    @deprecated
     def to_dict(self, **kwargs) -> dict:
         """
         Converts the entity to a json serializable dictionary.
@@ -132,37 +128,49 @@ class Entity(BaseModel):
         return serializer(self)
 
 
-class Concept(Entity):
+class Predicate(Entity):
     """
-    Unary predicate
+    Predicate
     """
+    label: str | None = None
     comment: str | None = None
     ontology: str | None = None
-    parents: list[Reference] = [OWL.Thing]
+    arity: int | None = None
+    inclusive: list[Reference] = []
+    disjoints: list[Reference] = []
 
     def __init__(self, _id: Reference, **kwargs):
         super().__init__(_id, **kwargs)
+        self.label = kwargs.get('label', None)
         self.comment = kwargs.get('comment', None)
         self.ontology = kwargs.get('ontology', None)
-        self.parents = kwargs.get('parents', [OWL.Thing])
+        self.inclusive = kwargs.get('inclusive', kwargs.get('parents', []))
+        self.disjoints = kwargs.get('disjoints', [])
 
 
-class Attribute(Entity):
+class Concept(Predicate):
+    """
+    Unary predicate
+    """
+
+    def __init__(self, _id: Reference, **kwargs):
+        super().__init__(_id, arity=1, **kwargs)
+
+
+class Attribute(Predicate):
     """
     Class of assertions ranging on concrete domains
     owl:DatatypeProperties
     """
 
     domain: Reference = OWL.Thing
-    parents: list[Reference] = [OWL.topDataProperty]
 
-    def __init__(self, _id: Reference, **kwargs):
-        super().__init__(_id, **kwargs)
-        self.domain = kwargs.get('domain', OWL.Thing)
-        self.parents = kwargs.get('parents', [OWL.topDataProperty])
+    def __init__(self, _id: Reference, domain=OWL.Thing, **kwargs):
+        super().__init__(_id, arity=2, **kwargs)
+        self.domain = domain
 
 
-class Relation(Entity):
+class Relation(Predicate):
     """
     Class of assertions ranging on individuals
     owl:ObjectProperty
@@ -170,22 +178,17 @@ class Relation(Entity):
     domain: Reference = OWL.Thing
     range: Reference = OWL.Thing
     inverse: Reference = None
-    parents: list[Reference] = [OWL.topObjectProperty]
 
     def __init__(self,
                  _id: Reference,
                  domain: Reference = OWL.Thing,
                  range: Reference = OWL.Thing,
                  inverse: Reference = None,
-                 parents=None,
                  **kwargs):
         super().__init__(_id, **kwargs)
         self.domain = domain
         self.range = range
         self.inverse = inverse
-        if parents is None:
-            parents = [OWL.topObjectProperty]
-        self.parents = parents
 
 
 class Assertion(BaseModel):
@@ -214,7 +217,6 @@ class Assertion(BaseModel):
     def is_empty(self) -> bool:
         return not self.values
 
-    @deprecated
     def to_dict(self, **kwargs) -> dict:
         if 'serializer' in kwargs:
             serializer = kwargs.get('serializer')
@@ -410,7 +412,7 @@ class AttributeInstance(Assertion):
         else:
             return default
 
-    @deprecated
+
     def to_dict(self, **kwargs) -> dict:
         if 'serializer' in kwargs:
             return super().to_dict(serializer=kwargs.get('serializer'))
@@ -500,7 +502,7 @@ class RelationInstance(Assertion):
                 kind_map[kind].append(individual)
         return kind_map
 
-    @deprecated
+
     def to_dict(self, **kwargs) -> dict:
         if 'serializer' in kwargs:
             return super().to_dict(serializer=kwargs.get('serializer'))
@@ -529,6 +531,12 @@ class Individual(Entity):
     Individual entity
 
     """
+
+    kind: list[Reference] = []
+    label: str = None
+    comment: str = None
+    attributes: list[AttributeInstance] = []
+    relations: list[RelationInstance] = []
 
     def __init__(self,
                  _id: Reference,
