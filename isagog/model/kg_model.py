@@ -104,6 +104,34 @@ class Entity(BaseModel):
     def __hash__(self):
         return self.id.__hash__()
 
+    @deprecated
+    def to_dict(self, **kwargs) -> dict:
+        """
+        Converts the entity to a json serializable dictionary.
+        :param kwargs: format (a string to specify the output format, 'api' for API output,
+                               default: object to dict conversion)
+                       serializer (a custom function to use for serialization, overrides format if present)
+        :return: a serializable dictionary representation of the entity
+        """
+        if 'serializer' in kwargs:
+            serializer = kwargs.get('serializer')
+            if not isinstance(serializer, Callable):
+                raise ValueError("bad serializer")
+        elif 'format' in kwargs:
+            if kwargs.get('format') == 'api':
+                rt = {
+                    "id": self.id,
+                }
+                if hasattr(self, '__meta__'):
+                    rt['meta'] = self.__meta__
+                return rt
+            else:
+                serializer = _todict
+        else:
+            serializer = _todict
+        return serializer(self)
+
+
 
 class Concept(Entity):
     """
