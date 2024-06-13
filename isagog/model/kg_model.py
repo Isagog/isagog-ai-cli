@@ -3,11 +3,17 @@
     (c) Isagog S.r.l. 2024, MIT License
 """
 import logging
+import uuid
 from typing import IO, TextIO, Any, Callable, Dict
 
 from rdflib import OWL, Graph, RDF, URIRef, RDFS
 
 import re
+
+from pydantic import BaseModel
+from typing_extensions import deprecated
+
+Value = str | int | float | bool
 
 
 class Identifier(str):
@@ -76,36 +82,17 @@ def _todict(obj, classkey=None):
         return obj
 
 
-class Entity(object):
-    """
-    Any identified knowledge entity, either predicative (property) or individual
-    Every entity has a string identifier and an optional meta type, which can be an OWL type
-    """
+class Entity(BaseModel):
+    id: Reference
+    meta: str = None
 
-    def __init__(self, _id: Reference, **kwargs):
-        """
+    def __init__(self, _id, **kwargs):
+        super().__init__(**kwargs)
+        self.id = _id
+        self.meta = kwargs.get('meta', None)
 
-        :param _id: the entity identifier, will be converted to a string
-        :param kwargs:
-        """
-        assert _id
-        if isinstance(_id, URIRef):
-            _id = Identifier(str(_id))
-        elif isinstance(_id, Identifier):
-            pass
-        elif isinstance(_id, str):
-            _id = Identifier(_id)
-        else:
-            raise ValueError("bad id object")
-        self.id = _id  # str(_id).strip("<>")
-        owl_type = kwargs.get('owl')
-        if owl_type:
-            if owl_type in OWL_ENTITY_TYPES:
-                self.__meta__ = owl_type
-            else:
-                logging.warning("bad owl type %s", owl_type)
-        else:
-            self.__meta__ = kwargs.get('meta', None)
+    class Config:
+        arbitrary_types_allowed = True
 
     def __eq__(self, other):
         return (
@@ -117,47 +104,19 @@ class Entity(object):
     def __hash__(self):
         return self.id.__hash__()
 
-    def to_dict(self, **kwargs) -> dict:
-        """
-        Converts the entity to a json serializable dictionary.
-        :param kwargs: format (a string to specify the output format, 'api' for API output,
-                               default: object to dict conversion)
-                       serializer (a custom function to use for serialization, overrides format if present)
-        :return: a serializable dictionary representation of the entity
-        """
-        if 'serializer' in kwargs:
-            serializer = kwargs.get('serializer')
-            if not isinstance(serializer, Callable):
-                raise ValueError("bad serializer")
-        elif 'format' in kwargs:
-            if kwargs.get('format') == 'api':
-                rt = {
-                    "id": self.id,
-                }
-                if hasattr(self, '__meta__'):
-                    rt['meta'] = self.__meta__
-                return rt
-            else:
-                serializer = _todict
-        else:
-            serializer = _todict
-        return serializer(self)
-
 
 class Concept(Entity):
     """
     Unary predicate
     """
+    comment: str | None = None
+    ontology: str | None = None
+    parents: list[Reference] = [OWL.Thing]
 
     def __init__(self, _id: Reference, **kwargs):
-        """
-
-        :param _id: the concept identifier
-        :param kwargs:
-        """
-        super().__init__(_id, owl=OWL.Class, **kwargs)
-        self.comment = kwargs.get('comment', "")
-        self.ontology = kwargs.get('ontology', "")
+        super().__init__(_id, **kwargs)
+        self.comment = kwargs.get('comment', None)
+        self.ontology = kwargs.get('ontology', None)
         self.parents = kwargs.get('parents', [OWL.Thing])
 
 
@@ -167,22 +126,13 @@ class Attribute(Entity):
     owl:DatatypeProperties
     """
 
-    def __init__(self,
-                 _id: Reference,
-                 domain: Reference = None,
-                 parents: list[Reference] = None,
-                 **kwargs):
-        """
+    domain: Reference = OWL.Thing
+    parents: list[Reference] = [OWL.topDataProperty]
 
-        :param _id:
-        :param kwargs: domain
-        """
-
-        super().__init__(_id, owl=OWL.DatatypeProperty)
-        self.domain = domain if domain else OWL.Thing
-        self.parents = parents if parents else [OWL.topDataProperty]
-        if 'type' in kwargs:
-            self.__type__ = kwargs.get('type')
+    def __init__(self, _id: Reference, **kwargs):
+        super().__init__(_id, **kwargs)
+        self.domain = kwargs.get('domain', OWL.Thing)
+        self.parents = kwargs.get('parents', [OWL.topDataProperty])
 
 
 class Relation(Entity):
@@ -190,84 +140,52 @@ class Relation(Entity):
     Class of assertions ranging on individuals
     owl:ObjectProperty
     """
+    domain: Reference = OWL.Thing
+    range: Reference = OWL.Thing
+    inverse: Reference = None
+    parents: list[Reference] = [OWL.topObjectProperty]
 
-    def __init__(
-            self,
-            _id: Reference,
-            domain: Reference = None,
-            range: Reference = None,
-            inverse: Reference = None,
-            parents: list[Reference] = None,
-            **kwargs
-    ):
-        """
-        :param _id:
-        :param kwargs: inverse, domain, range, label
-        """
-
-        super().__init__(_id, owl=OWL.ObjectProperty)
-        self.inverse = inverse if inverse else None
-        self.domain = domain if domain else OWL.Thing
-        self.range = range if range else OWL.Thing
-        self.label = kwargs.get('label', _uri_label(_id))
-        self.parents = parents if parents else OWL.topObjectProperty
+    def __init__(self,
+                 _id: Reference,
+                 domain: Reference = OWL.Thing,
+                 range: Reference = OWL.Thing,
+                 inverse: Reference = None,
+                 parents=None,
+                 **kwargs):
+        super().__init__(_id, **kwargs)
+        self.domain = domain
+        self.range = range
+        self.inverse = inverse
+        if parents is None:
+            parents = [OWL.topObjectProperty]
+        self.parents = parents
 
 
-class Assertion(object):
+class Assertion(BaseModel):
     """
     Assertion axiom of the form: property(subject, values)
     """
 
+    predicate: Reference
+    subject: Reference
+    values: list[Reference | Value]
+    id: str = None
+
     def __init__(self,
-                 predicate: Reference = None,
-                 subject: Reference = None,
-                 values: list = None,
+                 predicate: Reference,
+                 subject: Reference,
+                 values: list[Reference | Value] = None,
+                 reify: bool = False,
                  **kwargs):
-        """
-
-        :param predicate:
-        :param subject:
-        :param values:
-        """
-        if predicate is None:
-            # try to get the predicate from aliases in kwargs, if not present raise an error
-            predicate = kwargs.get('property', kwargs.get('id', None))
-            if predicate is None:
-                raise ValueError("missing predicate")
-
-        self.predicate = str(predicate).strip("<>")
-        self.subject = str(subject).strip("<>") if subject else None
-        self.values = list(values) if values else list()
-        if 'label' in kwargs:
-            self.label = kwargs.get('label')
-        if 'comment' in kwargs:
-            self.comment = kwargs.get('comment')
+        super().__init__(**kwargs)
+        self.predicate = predicate
+        self.subject = subject
+        self.values = values if values else []
+        if reify:
+            self.id = kwargs.get('id', uuid.uuid4())
 
     def is_empty(self) -> bool:
         return not self.values
-
-    def to_dict(self, **kwargs) -> dict:
-        if 'serializer' in kwargs:
-            serializer = kwargs.get('serializer')
-            if not isinstance(serializer, Callable):
-                raise ValueError("bad serializer")
-        elif 'format' in kwargs:
-            if kwargs.get('format') == 'api':
-                rt = {
-                    "id": self.predicate,
-                    "subject": self.subject,
-                    "values": self.values
-                }
-                if hasattr(self, 'label'):
-                    rt['label'] = self.label
-                if hasattr(self, 'comment'):
-                    rt['comment'] = self.comment
-                return rt
-            else:
-                serializer = _todict
-        else:
-            serializer = _todict
-        return serializer(self)
 
 
 class Ontology(Graph):
@@ -363,11 +281,13 @@ class AttributeInstance(Assertion):
     """
     Attributive assertion
     """
+    value_type: str = None
 
     def __init__(self,
                  predicate: Reference = None,
                  subject: Reference = None,
-                 values: list[str | int | float | bool] = None,
+                 values: list[Value] = None,
+                 type: str = None,
                  **kwargs):
         """
         :param subject: the asserted subject
@@ -375,7 +295,7 @@ class AttributeInstance(Assertion):
         :param values: the asserted values, they can be strings, integers, floats or booleans
         :param kwargs:
         """
-        self.value_type = kwargs.get('type')
+        self.value_type = type
         if values:
             specimen = values[0]
             if isinstance(specimen, str):
@@ -438,21 +358,6 @@ class AttributeInstance(Assertion):
             return self.values[0]
         else:
             return default
-
-    def to_dict(self, **kwargs) -> dict:
-        if 'serializer' in kwargs:
-            return super().to_dict(serializer=kwargs.get('serializer'))
-        rt = {}
-        if 'format' in kwargs and kwargs.get('format') == 'api':
-            rt["id"] = self.predicate
-            if hasattr(self, 'label'):
-                rt['label'] = self.label
-            if hasattr(self, 'type'):
-                rt['type'] = self.type
-            rt['values'] = self.values
-        else:
-            return super().to_dict()
-        return rt
 
 
 VOID_ATTRIBUTE = AttributeInstance(predicate='http://isagog.com/attribute#void')
@@ -528,6 +433,7 @@ class RelationInstance(Assertion):
                 kind_map[kind].append(individual)
         return kind_map
 
+    @deprecated
     def to_dict(self, **kwargs) -> dict:
         if 'serializer' in kwargs:
             return super().to_dict(serializer=kwargs.get('serializer'))

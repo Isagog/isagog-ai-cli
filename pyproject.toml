@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "isagog-ai"
-version = "0.9.5"
+version = "1.0.0"
 description = "client for isagog ai services"
 authors = ["Guido Vetere <g.vetere@isagog.com>"]
 readme = "README.md"
@@ -19,6 +19,7 @@ toml = "^0.10.2"
 pytest = "^8.2.1"
 python-dotenv = "^1.0.0"
 httpx = "^0.27.0"
+pydantic = "^2.7.4"
 
 
 [build-system]
