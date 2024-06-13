@@ -132,7 +132,6 @@ class Entity(BaseModel):
         return serializer(self)
 
 
-
 class Concept(Entity):
     """
     Unary predicate
@@ -238,7 +237,6 @@ class Assertion(BaseModel):
         else:
             serializer = _todict
         return serializer(self)
-
 
 
 class Ontology(Graph):
@@ -411,6 +409,22 @@ class AttributeInstance(Assertion):
             return self.values[0]
         else:
             return default
+
+    @deprecated
+    def to_dict(self, **kwargs) -> dict:
+        if 'serializer' in kwargs:
+            return super().to_dict(serializer=kwargs.get('serializer'))
+        rt = {}
+        if 'format' in kwargs and kwargs.get('format') == 'api':
+            rt["id"] = self.predicate
+            if hasattr(self, 'label'):
+                rt['label'] = self.label
+            if hasattr(self, 'type'):
+                rt['type'] = self.type
+            rt['values'] = self.values
+        else:
+            return super().to_dict()
+        return rt
 
 
 VOID_ATTRIBUTE = AttributeInstance(predicate='http://isagog.com/attribute#void')
@@ -704,6 +718,7 @@ class Individual(Entity):
     def updated(self):
         self._refresh = False
 
+    @deprecated
     def to_dict(self, **kwargs) -> dict:
         if 'serializer' in kwargs:
             return super().to_dict(serializer=kwargs.get('serializer'))
