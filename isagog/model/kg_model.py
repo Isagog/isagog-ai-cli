@@ -30,7 +30,7 @@ class Identifier(str):
         return f"<{self}>"
 
 
-Reference = URIRef | Identifier
+Reference = URIRef | Identifier | str
 Value = str | int | float | bool
 
 OWL_ENTITY_TYPES = [OWL.Class, OWL.NamedIndividual, OWL.ObjectProperty, OWL.DatatypeProperty, OWL.AnnotationProperty]
@@ -81,12 +81,12 @@ def _todict(obj, classkey=None):
 
 class Entity(BaseModel):
     id: Reference
-    meta: str = None
+    meta: str | None = None
 
-    def __init__(self, _id, **kwargs):
-        super().__init__(**kwargs)
-        self.id = _id
-        self.meta = kwargs.get('meta', None)
+    # def __init__(self, _id, **kwargs):
+    #     super().__init__(**kwargs)
+    #     self.id = _id
+    #     self.meta = kwargs.get('meta', None)
 
     class Config:
         arbitrary_types_allowed = True
@@ -136,25 +136,25 @@ class Predicate(Entity):
     comment: str | None = None
     ontology: str | None = None
     arity: int | None = None
-    inclusive: list[Reference] = []
-    disjoints: list[Reference] = []
+    inclusive: list[Reference] | None = None
+    disjoints: list[Reference] | None = None
 
-    def __init__(self, _id: Reference, **kwargs):
-        super().__init__(_id, **kwargs)
-        self.label = kwargs.get('label', None)
-        self.comment = kwargs.get('comment', None)
-        self.ontology = kwargs.get('ontology', None)
-        self.inclusive = kwargs.get('inclusive', kwargs.get('parents', []))
-        self.disjoints = kwargs.get('disjoints', [])
+    # def __init__(self, _id: Reference, **kwargs):
+    #     super().__init__(_id, **kwargs)
+    #     self.label = kwargs.get('label', None)
+    #     self.comment = kwargs.get('comment', None)
+    #     self.ontology = kwargs.get('ontology', None)
+    #     self.inclusive = kwargs.get('inclusive', kwargs.get('parents', []))
+    #     self.disjoints = kwargs.get('disjoints', [])
 
 
 class Concept(Predicate):
     """
     Unary predicate
     """
-
-    def __init__(self, _id: Reference, **kwargs):
-        super().__init__(_id, arity=1, **kwargs)
+    arity: int = 1
+    # def __init__(self, _id: Reference, **kwargs):
+    #     super().__init__(_id, arity=1, **kwargs)
 
 
 class Attribute(Predicate):
@@ -165,9 +165,9 @@ class Attribute(Predicate):
 
     domain: Reference = OWL.Thing
 
-    def __init__(self, _id: Reference, domain=OWL.Thing, **kwargs):
-        super().__init__(_id, arity=2, **kwargs)
-        self.domain = domain
+    # def __init__(self, _id: Reference, domain=OWL.Thing, **kwargs):
+    #     super().__init__(_id, arity=2, **kwargs)
+    #     self.domain = domain
 
 
 class Relation(Predicate):
@@ -177,18 +177,18 @@ class Relation(Predicate):
     """
     domain: Reference = OWL.Thing
     range: Reference = OWL.Thing
-    inverse: Reference = None
+    inverse: Reference | None = None
 
-    def __init__(self,
-                 _id: Reference,
-                 domain: Reference = OWL.Thing,
-                 range: Reference = OWL.Thing,
-                 inverse: Reference = None,
-                 **kwargs):
-        super().__init__(_id, **kwargs)
-        self.domain = domain
-        self.range = range
-        self.inverse = inverse
+    # def __init__(self,
+    #              _id: Reference,
+    #              domain: Reference = OWL.Thing,
+    #              range: Reference = OWL.Thing,
+    #              inverse: Reference = None,
+    #              **kwargs):
+    #     super().__init__(_id, **kwargs)
+    #     self.domain = domain
+    #     self.range = range
+    #     self.inverse = inverse
 
 
 class Assertion(BaseModel):
@@ -197,22 +197,26 @@ class Assertion(BaseModel):
     """
 
     predicate: Reference
-    subject: Reference
-    values: list[Reference | Value]
-    id: str = None
+    subject: Reference | None = None
+    values: list[Reference | Value] | None = None
+    id: str | None = None
 
-    def __init__(self,
-                 predicate: Reference,
-                 subject: Reference,
-                 values: list[Reference | Value] = None,
-                 reify: bool = False,
-                 **kwargs):
-        super().__init__(**kwargs)
-        self.predicate = predicate
-        self.subject = subject
-        self.values = values if values else []
-        if reify:
-            self.id = kwargs.get('id', uuid.uuid4())
+    class Config:
+        arbitrary_types_allowed = True
+
+    # def __init__(self,
+    #              predicate: Reference,
+    #              subject: Reference = None,
+    #              values: list[Reference | Value] = None,
+    #              reify: bool = False,
+    #              **kwargs):
+    #
+    #     self.predicate = predicate
+    #     self.subject = subject
+    #     self.values = values if values else []
+    #     if reify:
+    #         self.id = kwargs.get('id', uuid.uuid4())
+    #     super().__init__(**kwargs)
 
     def is_empty(self) -> bool:
         return not self.values
@@ -269,19 +273,19 @@ class Ontology(Graph):
         self.parse(source=source, publicID=publicIRI, format=source_format)
 
         self.concepts = [
-            Concept(cls)
+            Concept(id=cls)
             for cls in self.subjects(predicate=RDF.type, object=OWL.Class)
             if isinstance(cls, URIRef)
         ]
         self.relations = [
-            Relation(rl)
+            Relation(id=rl)
             for rl in self.subjects(
                 predicate=RDF.type, object=OWL.ObjectProperty
             )
             if isinstance(rl, URIRef)
         ]
         self.attributes = [
-            Attribute(att)
+            Attribute(id=att)
             for att in self.subjects(
                 predicate=RDF.type, object=OWL.DatatypeProperty
             )
@@ -291,7 +295,7 @@ class Ontology(Graph):
                 predicate=RDF.type, object=OWL.AnnotationProperty
         ):
             if isinstance(ann, URIRef):
-                self.attributes.append(Attribute(ann))
+                self.attributes.append(Attribute(id=ann))
 
         self._submap = dict[Concept, list[Concept]]()
 
@@ -301,7 +305,7 @@ class Ontology(Graph):
         """
         if sup not in self._submap:
             self._submap[sup] = [
-                Concept(sc)
+                Concept(id=sc)
                 for sc in self.subjects(RDFS.subClassOf, sup.id)
                 if isinstance(sc, URIRef)
             ]
@@ -334,23 +338,11 @@ class AttributeInstance(Assertion):
     """
     Attributive assertion
     """
-    value_type: str = None
+    value_type: str | None = None
 
-    def __init__(self,
-                 predicate: Reference = None,
-                 subject: Reference = None,
-                 values: list[Value] = None,
-                 type: str = None,
-                 **kwargs):
-        """
-        :param subject: the asserted subject
-        :param predicate: the asserted property
-        :param values: the asserted values, they can be strings, integers, floats or booleans
-        :param kwargs:
-        """
-        self.value_type = type
-        if values:
-            specimen = values[0]
+    def __post_init__(self):
+        if self.values:
+            specimen = self.values[0]
             if isinstance(specimen, str):
                 if self.value_type:
                     if self.value_type == "string":
@@ -389,10 +381,66 @@ class AttributeInstance(Assertion):
                     self.value_type = "bool"
             else:
                 raise ValueError("bad values for attribute")
-        super().__init__(predicate=predicate,
-                         subject=subject,
-                         values=values,
-                         **kwargs)
+
+    # def __init__(self,
+    #              predicate: Reference,
+    #              subject: Reference = None,
+    #              values: list[Value] = None,
+    #              value_type: str = None,
+    #              reify: bool = False,
+    #              **kwargs):
+    #     """
+    #     :param subject: the asserted subject
+    #     :param predicate: the asserted property
+    #     :param values: the asserted values, they can be strings, integers, floats or booleans
+    #     :param kwargs:
+    #     """
+    #     super().__init__(predicate=predicate,
+    #                      subject=subject,
+    #                      values=values,
+    #                      reify=reify,
+    #                      **kwargs)
+    #     self.value_type = value_type
+    #     if values:
+    #         specimen = values[0]
+    #         if isinstance(specimen, str):
+    #             if self.value_type:
+    #                 if self.value_type == "string":
+    #                     pass
+    #                 else:
+    #                     raise ValueError("bad values for string attribute")
+    #             else:
+    #                 self.value_type = "string"
+    #
+    #         elif isinstance(specimen, int):
+    #             if self.value_type:
+    #                 if self.value_type == "int":
+    #                     pass
+    #                 else:
+    #                     raise ValueError("bad values for int attribute")
+    #             else:
+    #                 self.value_type = "int"
+    #             raise ValueError("bad values for int attribute")
+    #
+    #         elif isinstance(specimen, float):
+    #             if self.value_type:
+    #                 if self.value_type == "float":
+    #                     pass
+    #                 else:
+    #                     raise ValueError("bad values for float attribute")
+    #             else:
+    #                 self.value_type = "float"
+    #
+    #         elif isinstance(specimen, bool):
+    #             if self.value_type:
+    #                 if self.value_type == "bool":
+    #                     pass
+    #                 else:
+    #                     raise ValueError("bad values for bool attribute")
+    #             else:
+    #                 self.value_type = "bool"
+    #         else:
+    #             raise ValueError("bad values for attribute")
 
     def all_values_as_string(self) -> str:
         match len(self.values):
@@ -411,7 +459,6 @@ class AttributeInstance(Assertion):
             return self.values[0]
         else:
             return default
-
 
     def to_dict(self, **kwargs) -> dict:
         if 'serializer' in kwargs:
@@ -437,37 +484,53 @@ class RelationInstance(Assertion):
     Relational assertion
     """
 
-    def __init__(self,
-                 predicate: Reference = None,
-                 subject: Reference = None,
-                 values: list[Any | Reference | dict] = None,
-                 **kwargs):
-        """
-
-        :param property: the asserted property
-        :param subject: the assertion's subject
-        :param values: the asserted values, they can be individuals, references or dictionaries
-        :param kwargs:
-        """
-        if values:
-            specimen = values[0]
+    def __post_init__(self):
+        if self.values:
+            specimen = self.values[0]
             if isinstance(specimen, Individual):
                 pass
             elif isinstance(specimen, Reference):
                 # values are references, convert them to Individuals
-                inst_values = [Individual(_id=r_data) for r_data in values]
-                values = inst_values
+                inst_values = [Individual(_id=r_data) for r_data in self.values]
+                self.values = inst_values
             elif isinstance(specimen, dict):
                 # if values are dictionaries, then convert them to Individuals
-                inst_values = [Individual(_id=r_data.get('id'), **r_data) for r_data in values]
-                values = inst_values
+                inst_values = [Individual(_id=r_data.get('id'), **r_data) for r_data in self.values]
+                self.values = inst_values
             else:
                 raise ValueError("bad values for relational assertion")
 
-        super().__init__(predicate=predicate,
-                         subject=subject,
-                         values=values,
-                         **kwargs)
+    # def __init__(self,
+    #              predicate: Reference = None,
+    #              subject: Reference = None,
+    #              values: list[Any | Reference | dict] = None,
+    #              **kwargs):
+    #     """
+    #
+    #     :param property: the asserted property
+    #     :param subject: the assertion's subject
+    #     :param values: the asserted values, they can be individuals, references or dictionaries
+    #     :param kwargs:
+    #     """
+    #     if values:
+    #         specimen = values[0]
+    #         if isinstance(specimen, Individual):
+    #             pass
+    #         elif isinstance(specimen, Reference):
+    #             # values are references, convert them to Individuals
+    #             inst_values = [Individual(_id=r_data) for r_data in values]
+    #             values = inst_values
+    #         elif isinstance(specimen, dict):
+    #             # if values are dictionaries, then convert them to Individuals
+    #             inst_values = [Individual(_id=r_data.get('id'), **r_data) for r_data in values]
+    #             values = inst_values
+    #         else:
+    #             raise ValueError("bad values for relational assertion")
+    #
+    #     super().__init__(predicate=predicate,
+    #                      subject=subject,
+    #                      values=values,
+    #                      **kwargs)
 
     def all_values(self, only_id=True) -> list:
         """
@@ -502,7 +565,6 @@ class RelationInstance(Assertion):
                 kind_map[kind].append(individual)
         return kind_map
 
-
     def to_dict(self, **kwargs) -> dict:
         if 'serializer' in kwargs:
             return super().to_dict(serializer=kwargs.get('serializer'))
@@ -533,57 +595,57 @@ class Individual(Entity):
     """
 
     kind: list[Reference] = []
-    label: str = None
-    comment: str = None
-    attributes: list[AttributeInstance] = []
-    relations: list[RelationInstance] = []
+    label: str | None = None
+    comment: str | None = None
+    attributes: list[AttributeInstance] | None = None
+    relations: list[RelationInstance] | None = None
 
-    def __init__(self,
-                 _id: Reference,
-                 kind: Reference | list[Reference] = None,
-                 label: str = None,
-                 comment: str = None,
-                 attributes: list[AttributeInstance | dict] = None,
-                 relations: list[RelationInstance | dict] = None,
-                 **kwargs
-                 ):
-        """
-
-        :param _id: the individual identifier
-        :param kind: the individual kind(s)
-        :param label: the distinguished attribute 'label'
-        :param comment: the distinguished attribute 'comment'
-        :param attributes: the individual attributes
-        :param relations: the individual relations
-        :param kwargs:
-        """
-        super().__init__(_id, owl=OWL.NamedIndividual, **kwargs)
-        self.kind = list(kind) if kind else [OWL.Thing]
-        self.label = label if label else _uri_label(_id)
-        self.comment = comment if comment else None
-        self.attributes = list()
-        self.relations = list()
-        if attributes:
-            for attribute in attributes:
-                if isinstance(attribute, dict):
-                    attribute = AttributeInstance(**attribute)
-                self.add_attribute(instance=attribute)
-
-        if relations:
-            for relation in relations:
-                if isinstance(relation, dict):
-                    relation = RelationInstance(**relation)
-                self.add_relation(instance=relation)
-        if 'score' in kwargs and kwargs.get('score'):
-            self.score = float(kwargs.get('score'))
-        if self.has_attribute(PROFILE_ATTRIBUTE):
-            self.profile = {
-                profile_value.split("=")[0]: int(profile_value.split("=")[1])
-                for profile_value in self.get_attribute(PROFILE_ATTRIBUTE).values
-            }
-        else:
-            self.profile = {}
-        self._refresh = True
+    # def __init__(self,
+    #              _id: Reference,
+    #              kind: Reference | list[Reference] = None,
+    #              label: str = None,
+    #              comment: str = None,
+    #              attributes: list[AttributeInstance | dict] = None,
+    #              relations: list[RelationInstance | dict] = None,
+    #              **kwargs
+    #              ):
+    #     """
+    #
+    #     :param _id: the individual identifier
+    #     :param kind: the individual kind(s)
+    #     :param label: the distinguished attribute 'label'
+    #     :param comment: the distinguished attribute 'comment'
+    #     :param attributes: the individual attributes
+    #     :param relations: the individual relations
+    #     :param kwargs:
+    #     """
+    #     super().__init__(_id, owl=OWL.NamedIndividual, **kwargs)
+    #     self.kind = list(kind) if kind else [OWL.Thing]
+    #     self.label = label if label else _uri_label(_id)
+    #     self.comment = comment if comment else None
+    #     self.attributes = list()
+    #     self.relations = list()
+    #     if attributes:
+    #         for attribute in attributes:
+    #             if isinstance(attribute, dict):
+    #                 attribute = AttributeInstance(**attribute)
+    #             self.add_attribute(instance=attribute)
+    #
+    #     if relations:
+    #         for relation in relations:
+    #             if isinstance(relation, dict):
+    #                 relation = RelationInstance(**relation)
+    #             self.add_relation(instance=relation)
+    #     if 'score' in kwargs and kwargs.get('score'):
+    #         self.score = float(kwargs.get('score'))
+    #     if self.has_attribute(PROFILE_ATTRIBUTE):
+    #         self.profile = {
+    #             profile_value.split("=")[0]: int(profile_value.split("=")[1])
+    #             for profile_value in self.get_attribute(PROFILE_ATTRIBUTE).values
+    #         }
+    #     else:
+    #         self.profile = {}
+    #     self._refresh = True
 
     def has_attribute(self, attribute_id: Reference) -> bool:
         """
@@ -726,7 +788,7 @@ class Individual(Entity):
     def updated(self):
         self._refresh = False
 
-    @deprecated
+
     def to_dict(self, **kwargs) -> dict:
         if 'serializer' in kwargs:
             return super().to_dict(serializer=kwargs.get('serializer'))
