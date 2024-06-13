@@ -198,7 +198,6 @@ class Assertion(BaseModel):
 
     predicate: Reference
     subject: Reference | None = None
-    values: list[Reference | Value] | None = None
     id: str | None = None
 
     class Config:
@@ -338,6 +337,7 @@ class AttributeInstance(Assertion):
     """
     Attributive assertion
     """
+    values: list[Value] | None = None
     value_type: str | None = None
 
     def __post_init__(self):
@@ -483,6 +483,7 @@ class RelationInstance(Assertion):
     """
     Relational assertion
     """
+    values: list[Reference | Entity] | None = None
 
     def __post_init__(self):
         if self.values:
@@ -597,8 +598,8 @@ class Individual(Entity):
     kind: list[Reference] = []
     label: str | None = None
     comment: str | None = None
-    attributes: list[AttributeInstance] | None = None
-    relations: list[RelationInstance] | None = None
+    attributes: list[AttributeInstance] | None = []
+    relations: list[RelationInstance] | None = []
 
     # def __init__(self,
     #              _id: Reference,
@@ -787,7 +788,6 @@ class Individual(Entity):
 
     def updated(self):
         self._refresh = False
-
 
     def to_dict(self, **kwargs) -> dict:
         if 'serializer' in kwargs:
