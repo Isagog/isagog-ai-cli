@@ -11,8 +11,9 @@ from typing import Type, TypeVar
 import httpx
 from dotenv import load_dotenv
 
-from isagog.model.kg_model import Individual, Entity, Assertion, Ontology, Attribute, Concept, Relation, Reference
+from isagog.model.kg_model import Individual, Entity, Assertion, Attribute, Concept, Relation, Reference
 from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
+from isagog.model.ontology import Ontology
 
 load_dotenv()
 
@@ -55,6 +56,7 @@ class KnowledgeBase(object):
                    _id: Reference,
                    expand: bool = True,
                    entity_type: Type[E] = Entity,
+                   **kwargs
                    ) -> E | None:
         """
         Gets the entity by its identifier
@@ -88,12 +90,8 @@ class KnowledgeBase(object):
                 headers=headers,
             )
             res.raise_for_status()
-            if res.status_code == 200:
-                self.logger.debug("Fetched %s", _id)
-                return entity_type(_id, **res.json())
-            else:
-                self.logger.error("Couldn't fetch %s due to %s", _id, res.text)
-                return None
+            self.logger.debug("Fetched %s", _id)
+            return entity_type(id=_id, **res.json())
         except httpx.ConnectError:
             self.logger.error("Failed to connect to the host %s.", self.route)
             return None
@@ -114,7 +112,7 @@ class KnowledgeBase(object):
     def query_assertions(self,
                          subject: Individual,
                          properties: list[Attribute | Relation],
-                         timeout=KG_DEFAULT_TIMEOUT,
+                         **kwargs
                          ) -> list[Assertion]:
         """
         Returns specific entity properties
@@ -146,6 +144,8 @@ class KnowledgeBase(object):
 
         query_dict = query.to_dict(version=self.version)
 
+        timeout = kwargs.get('timeout', KG_DEFAULT_TIMEOUT)
+
         try:
             res = httpx.post(
                 url=self.route,
@@ -154,26 +154,24 @@ class KnowledgeBase(object):
                 timeout=timeout
             )
             res.raise_for_status()
-            if res.status_code == 200:
-                res_list = res.json()
-                if len(res_list) == 0:
-                    self.logger.warning("Void attribute query")
-                    return []
-                else:
-                    res_attrib_list = res_list[0].get('attributes', OSError("malformed response"))
 
-                    def __get_values(_prop: str) -> str:
-                        try:
-                            record = next(item for item in res_attrib_list if item['id'] == _prop)
-                            return record.get('values', OSError("malformed response"))
-                        except StopIteration:
-                            # raise OSError("incomplete response: %s not found", _prop)
-                            return None
-
-                    return [Assertion(predicate=prop, values=__get_values(prop)) for prop in properties]
-            else:
-                self.logger.warning("Query of entity %s failed due to %s", subject, res.text)
+            res_list = res.json()
+            if len(res_list) == 0:
+                self.logger.warning("Void attribute query")
                 return []
+            else:
+                res_attrib_list = res_list[0].get('attributes', OSError("malformed response"))
+
+                def __get_values(_prop: str) -> str:
+                    try:
+                        record = next(item for item in res_attrib_list if item['id'] == _prop)
+                        return record.get('values', OSError("malformed response"))
+                    except StopIteration:
+                        # raise OSError("incomplete response: %s not found", _prop)
+                        return None
+
+                return [Assertion(predicate=prop, values=__get_values(prop)) for prop in properties]
+
         except httpx.ConnectError:
             self.logger.error("Failed to connect to the host %s.", self.route)
             return []
@@ -194,12 +192,10 @@ class KnowledgeBase(object):
     def search_individuals(self,
                            kinds: list[Concept] = None,
                            constraints: dict[Attribute, Value] = None,
-                           timeout=KG_DEFAULT_TIMEOUT,
-                           auth_token=None
+                           **kwargs
                            ) -> list[Individual]:
         """
         Retrieves individuals by string search
-        :param timeout: the request timeout
         :param kinds: the kinds to search for
         :param constraints: the search constraints
         :return: a list of matching individuals
@@ -221,8 +217,11 @@ class KnowledgeBase(object):
         query.add(search_clause)
 
         headers = {"Accept": "application/json"}
-        if auth_token:
-            headers[AUTH_TOKEN_KEY] = auth_token
+        if 'auth_token' in kwargs:
+            headers[AUTH_TOKEN_KEY] = kwargs.get('auth_token')
+
+        timeout = kwargs.get('timeout', KG_DEFAULT_TIMEOUT)
+
         try:
             res = httpx.post(
                 url=self.route,
@@ -232,7 +231,7 @@ class KnowledgeBase(object):
             )
             res.raise_for_status()
             if res.status_code == 200:
-                entities.extend([Individual(r.get('id'), **r) for r in res.json()])
+                entities.extend([Individual(id=r.get('id'), **r) for r in res.json()])
             else:
                 self.logger.error("Search individuals failed: code %d, reason %s", res.status_code, res.text)
             return entities
@@ -256,14 +255,13 @@ class KnowledgeBase(object):
     def query_individuals(self,
                           query: UnarySelectQuery,
                           kind: Type[E] = Individual,
-                          timeout=KG_DEFAULT_TIMEOUT,
+                          **kwargs
                           ) -> list[E]:
         """
 
 
         :param query: the query
         :param kind: the kind of individuals to return
-        :param timeout: the request timeout
         :return: a list of individuals of the specified kind
         """
         start_time = time.time()
@@ -277,6 +275,9 @@ class KnowledgeBase(object):
 
         if AUTH_TOKEN_VALUE:
             headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
+
+        timeout = kwargs.get('timeout', KG_DEFAULT_TIMEOUT)
+
         try:
             res = httpx.post(
                 url=self.route,
@@ -285,14 +286,9 @@ class KnowledgeBase(object):
                 timeout=timeout
             )
             res.raise_for_status()
-            if res.status_code == 200:
-                self.logger.debug("Query individuals done in %d seconds", time.time() - start_time)
-                return [kind(r.get('id'), **r) for r in res.json()]
-            elif res.status_code < 500:
-                self.logger.warning("query individuals return code %d, reason %s", res.status_code, res.text)
-            else:
-                self.logger.error("query individuals return code code %d, reason %s", res.status_code, res.text)
-            return []
+            self.logger.debug("Query individuals done in %d seconds", time.time() - start_time)
+            return [kind(r.get('id'), **r) for r in res.json()]
+
         except httpx.ConnectError:
             self.logger.error("Failed to connect to the host %s.", self.route)
             return []
@@ -310,7 +306,7 @@ class KnowledgeBase(object):
             self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
             return []
 
-    def upsert_individual(self, individual: Individual) -> bool:
+    def upsert_individual(self, individual: Individual, **kwargs) -> bool:
         """
         Updates an individual or insert it if not present; existing properties are preserved
 
@@ -341,12 +337,8 @@ class KnowledgeBase(object):
                     headers=headers
                 )
                 res.raise_for_status()
-                if res.status_code == 200:
-                    individual.updated()
-                    return True
-                else:
-                    self.logger.error(f"upsert failed {res.status_code}")
-                    return False
+                individual.updated()
+                return True
             except httpx.ConnectError:
                 self.logger.error("Failed to connect to the host %s.", self.route)
                 return False
@@ -367,5 +359,5 @@ class KnowledgeBase(object):
         else:
             self.logger.warning("Individual %s doesn't need update", individual.id)
 
-    def delete_individual(self, _id: Reference, auth_token=None):
+    def delete_individual(self, _id: Reference, **kwargs):
         pass
