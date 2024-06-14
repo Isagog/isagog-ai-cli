@@ -7,7 +7,7 @@ import re
 from enum import Enum
 from typing import Any, Callable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from rdflib import OWL, URIRef
 
 # class Identifier(str):
@@ -161,16 +161,18 @@ class Predicate(Entity):
     label: str | None = None
     comment: str | None = None
     arity: int | None = 0
-    implied: list[Reference] | None = []
-    disjoint: list[Reference] | None = []
+    implied: list[Reference | Entity] | None = []
+    disjoint: list[Reference | Entity] | None = []
 
-    def add_implied(self, predicate: Reference):
-        if predicate not in self.implied:
-            self.implied.append(predicate)
-
-    def add_disjoint(self, predicate: Reference):
-        if predicate not in self.disjoint:
-            self.disjoint.append(predicate)
+    @model_validator(mode='after')
+    def validate(self):
+        if self.implied or self.disjoint:
+            for ref in self.implied + self.disjoint:
+                if isinstance(ref, Reference):
+                    pass
+                elif isinstance(ref, Predicate):
+                    if self.arity != ref.arity:
+                        raise ValueError("bad implied")
 
 
 class Concept(Predicate):
@@ -195,8 +197,8 @@ class Relation(Predicate):
     owl:ObjectProperty
     """
     arity: int = 2
-    domain: Reference | None = None
-    range: Reference | None = None
+    domain: Reference | Entity | None = None
+    range: Reference | Entity | None = None
     inverse: Reference | None = None
 
 
