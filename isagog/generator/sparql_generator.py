@@ -46,6 +46,18 @@ class SPARQLGenerator(Generator):
                     var = clause.variable if clause.variable else Variable()
                     clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
                     clause_str += f'FILTER ({var} < "{clause.argument}")'
+                case Comparison.GREATER_EQUAL:
+                    var = clause.variable if clause.variable else Variable()
+                    clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
+                    clause_str += f'FILTER ({var} >= "{clause.argument}")'
+                case Comparison.LESSER_EQUAL:
+                    var = clause.variable if clause.variable else Variable()
+                    clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
+                    clause_str += f'FILTER ({var} <= "{clause.argument}")'
+                case Comparison.EQUAL:
+                    var = clause.variable if clause.variable else Variable()
+                    clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
+                    clause_str += f'FILTER ({var} = "{clause.argument}")'
                 case Comparison.SIMILARITY:
                     pass
                 case _:

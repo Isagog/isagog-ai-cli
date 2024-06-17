@@ -42,8 +42,11 @@ class Comparison(Enum):
     KEYWORD = "keyword_search"
     REGEX = "regex"
     SIMILARITY = "similarity"
+    EQUAL = "equal"
     GREATER = "greater_than"
+    GREATER_EQUAL = "greater_equal"
     LESSER = "lesser_than"
+    LESSER_EQUAL = "lesser_equal"
     ANY = "any"
 
 
