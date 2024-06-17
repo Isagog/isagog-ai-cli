@@ -586,6 +586,9 @@ class SelectQuery(object):
     def to_dict(self, **kwargs) -> dict:
         pass
 
+    def sort_clauses(self):
+        pass
+
 
 class UnarySelectQuery(SelectQuery):
     """
@@ -828,5 +831,13 @@ class UnarySelectQuery(SelectQuery):
     def atom_property_clauses(self) -> list[AtomicClause]:
         return [c for c in self.atom_clauses() if c.property != RDF_TYPE]
 
-    # def property_clauses(self):
-    #     return self.atom_property_clauses() + self.disjunctive_clauses()
+    def sort_clauses(self):
+        """
+        Sorts the clauses in the query by pushing optionals back
+        :return:
+        """
+        self.clauses = sorted(self.clauses, key=lambda clause: clause.optional)
+        for clause in self.clauses:
+            if isinstance(clause, CompositeClause):
+                clause.clauses = sorted(clause.clauses, key=lambda c: c.optional)
+        return self

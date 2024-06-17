@@ -118,6 +118,8 @@ class SPARQLGenerator(Generator):
         :param kwargs:
         :return:
         """
+        if kwargs.get('optimize', True):
+            query.sort_clauses()
 
         if not isinstance(query, UnarySelectQuery):
             raise TypeError("Can only generate_query from UnarySelectQuery")
