@@ -58,6 +58,9 @@ class SPARQLGenerator(Generator):
                     var = clause.variable if clause.variable else Variable()
                     clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
                     clause_str += f'FILTER ({var} = "{clause.argument}")'
+                case Comparison.NOT_EXISTS:
+                    var = Variable()
+                    clause_str += f'FILTER NOT EXISTS {{ {clause.subject} {clause.property.n3()} {var} }}'
                 case Comparison.SIMILARITY:
                     pass
                 case _:

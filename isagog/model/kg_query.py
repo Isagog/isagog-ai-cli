@@ -47,6 +47,7 @@ class Comparison(Enum):
     GREATER_EQUAL = "greater_equal"
     LESSER = "lesser_than"
     LESSER_EQUAL = "lesser_equal"
+    NOT_EXISTS = "not_exists"
     ANY = "any"
 
 
@@ -249,7 +250,7 @@ class AtomicClause(Clause):
     def is_defined(self) -> bool:
         return (self.subject is not None
                 and self.property is not None
-                and (self.argument is not None or self.variable is not None))
+                and (self.method == Comparison.NOT_EXISTS or self.argument is not None or self.variable is not None))
 
     def to_dict(self, **kwargs) -> dict:
         out = {
