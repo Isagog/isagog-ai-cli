@@ -46,6 +46,21 @@ class SPARQLGenerator(Generator):
                     var = clause.variable if clause.variable else Variable()
                     clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
                     clause_str += f'FILTER ({var} < "{clause.argument}")'
+                case Comparison.GREATER_EQUAL:
+                    var = clause.variable if clause.variable else Variable()
+                    clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
+                    clause_str += f'FILTER ({var} >= "{clause.argument}")'
+                case Comparison.LESSER_EQUAL:
+                    var = clause.variable if clause.variable else Variable()
+                    clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
+                    clause_str += f'FILTER ({var} <= "{clause.argument}")'
+                case Comparison.EQUAL:
+                    var = clause.variable if clause.variable else Variable()
+                    clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
+                    clause_str += f'FILTER ({var} = "{clause.argument}")'
+                case Comparison.NOT_EXISTS:
+                    var = Variable()
+                    clause_str += f'FILTER NOT EXISTS {{ {clause.subject} {clause.property.n3()} {var} }}'
                 case Comparison.SIMILARITY:
                     pass
                 case _:
@@ -103,6 +118,8 @@ class SPARQLGenerator(Generator):
         :param kwargs:
         :return:
         """
+        if kwargs.get('optimize', True):
+            query.sort_clauses()
 
         if not isinstance(query, UnarySelectQuery):
             raise TypeError("Can only generate_query from UnarySelectQuery")

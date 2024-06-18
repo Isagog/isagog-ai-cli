@@ -42,8 +42,12 @@ class Comparison(Enum):
     KEYWORD = "keyword_search"
     REGEX = "regex"
     SIMILARITY = "similarity"
+    EQUAL = "equal"
     GREATER = "greater_than"
+    GREATER_EQUAL = "greater_equal"
     LESSER = "lesser_than"
+    LESSER_EQUAL = "lesser_equal"
+    NOT_EXISTS = "not_exists"
     ANY = "any"
 
 
@@ -246,7 +250,7 @@ class AtomicClause(Clause):
     def is_defined(self) -> bool:
         return (self.subject is not None
                 and self.property is not None
-                and (self.argument is not None or self.variable is not None))
+                and (self.method == Comparison.NOT_EXISTS or self.argument is not None or self.variable is not None))
 
     def to_dict(self, **kwargs) -> dict:
         out = {
@@ -582,6 +586,9 @@ class SelectQuery(object):
     def to_dict(self, **kwargs) -> dict:
         pass
 
+    def sort_clauses(self):
+        pass
+
 
 class UnarySelectQuery(SelectQuery):
     """
@@ -824,5 +831,13 @@ class UnarySelectQuery(SelectQuery):
     def atom_property_clauses(self) -> list[AtomicClause]:
         return [c for c in self.atom_clauses() if c.property != RDF_TYPE]
 
-    # def property_clauses(self):
-    #     return self.atom_property_clauses() + self.disjunctive_clauses()
+    def sort_clauses(self):
+        """
+        Sorts the clauses in the query by pushing optionals back
+        :return:
+        """
+        self.clauses = sorted(self.clauses, key=lambda clause: clause.optional)
+        for clause in self.clauses:
+            if isinstance(clause, CompositeClause):
+                clause.clauses = sorted(clause.clauses, key=lambda c: c.optional)
+        return self
