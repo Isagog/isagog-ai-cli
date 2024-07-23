@@ -495,7 +495,8 @@ class SelectQuery(object):
         self.min_score = min_score
 
     def add_prefix(self, prefix: str, uri: str):
-        self.prefixes.append((prefix, uri))
+        if not any(existing_prefix == prefix for existing_prefix, _ in self.prefixes):
+            self.prefixes.append((prefix, uri))
 
     def add(self, clauses: Clause | list[Clause], **kwargs):
         if isinstance(clauses, list):
