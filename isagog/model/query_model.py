@@ -6,10 +6,11 @@
 from __future__ import annotations
 
 import re
-from kg_model import N3String
+from isagog.model.kg_model import N3String
 from enum import Enum
 from typing import Protocol, List, Tuple, Union, Optional, ClassVar, Any
 from urllib.parse import urlparse
+from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, Field, model_validator, field_validator
 from rdflib import RDF, RDFS, OWL, URIRef
@@ -47,7 +48,7 @@ def is_uri(string: str) -> bool:
 def is_variable(string: str) -> bool:
     return string.startswith('?')
 
-class Identifier(BaseModel, N3String):
+class Identifier(BaseModel):
     value: str
 
     @field_validator('value', mode='before')
@@ -58,7 +59,11 @@ class Identifier(BaseModel, N3String):
                     raise ValueError("Identifier cannot be a variable")
                 URIRef(value)
                 return value
-            raise ValueError(f"Expected string, got {type(value)}")
+            elif isinstance(value, (URIRef, N3String)):
+                return str(value)
+            elif isinstance(value, Identifier):
+                return value.value
+            raise ValueError(f"Unexpected type for Identifier {type(value)}")
         except Exception as e:
             raise ValueError(f"Invalid identifier: {e}")
 
@@ -116,18 +121,23 @@ class Value(BaseModel):
 RDF_TYPE = Identifier(value=str(RDF.type))
 RDFS_LABEL = Identifier(value=str(RDFS.label))
 OWL_CLASS = Identifier(value=str(OWL.Class))
+OWL_INDIVIDUAL = Identifier(value=str(OWL.NamedIndividual))
 
 
 Subject = Union[Identifier, Variable]
 Property = Identifier
 Argument = Union[Value,Identifier, Variable]
 
-class BaseClause(BaseModel):
-    subject: Optional[Subject] = None
+class BaseClause(BaseModel, ABC):
+    # subject: Optional[Subject] = None
     optional: bool = False
 
+    @abstractmethod
+    def subject(self) -> Optional[Subject]:
+        pass
+
     def is_defined(self) -> bool:
-        return self.subject is not None
+        return self.subject() is not None
 
     model_config = {
         "extra": "forbid"
@@ -135,11 +145,13 @@ class BaseClause(BaseModel):
 
 
 class AtomicClause(BaseClause):
+    subject: Optional[Subject] = None
     property: Identifier
     argument: Argument
     #variable: Optional[Variable] = None
     operator: Comparison = Comparison.ANY
     project: bool = True
+    optional: bool = False
     type: ClassVar[str] = "atomic"
 
     def arg_variable(self) -> bool:
@@ -261,7 +273,7 @@ class Select(CompositeClause):
         elif isinstance(last_component, CompositeClause):
             last_component.add(new_atom)
         else:
-            raise Exception(f"Unexpected clause type: {type(self.last())}")
+            raise Exception("Malformed select: did you forget a 'where'?")
         return self
 
     def or_where(self,
@@ -294,7 +306,7 @@ class Select(CompositeClause):
 
 class SelectQuery(BaseModel):
     prefixes: List[Tuple[str, str]] = Field(default_factory=lambda: DEFAULT_PREFIXES.copy())
-    select: Select = Field(...)
+    select: Select = Field(default_factory=Select)
     graph: str = "defaultGraph"
     limit: int = -1
     lang: str = "en"
@@ -322,9 +334,7 @@ class SelectQuery(BaseModel):
                                   argument=argument,
                                   optional=optional,
                                   project=project)
-        if self.select is not None:
-            raise Exception("Select clause is not empty")
-        self.select = Select(components=[new_clause])
+        self.select.components.append(new_clause)
         return self.select
 
 
@@ -434,7 +444,11 @@ class UnarySelectQuery(SelectQuery):
 
 
     @model_validator(mode='after')
-    def setup_kinds(self) -> 'UnarySelectQuery':
+    def setup(self) -> 'UnarySelectQuery':
+        self.where(subject=self.subject,
+                   property=RDF_TYPE,
+                   operation=Comparison.EXACT,
+                   argument=OWL_INDIVIDUAL)
         if self.kinds:
             # Add RDF type clause for the first kind
             self.select.and_where(subject=self.subject,
