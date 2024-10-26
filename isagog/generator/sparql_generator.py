@@ -74,35 +74,35 @@ class SPARQLGenerator(Generator):
             return clause_str
         elif isinstance(clause, ConjunctiveClause):
             strio = StringIO()
-            if len(clause.clauses) > 1:
+            if len(clause.components) > 1:
                 if clause.optional:
                     strio.write("OPTIONAL")
                 strio.write("\t{\n")
-                for sub_clause in clause.clauses: #[1:]:
+                for sub_clause in clause.components: #[1:]:
                     strio.write("\t\t\t" + self.generate_clause(sub_clause))  # sub_clause.to_sparql())
                 strio.write("\t\t}\n")
                 # strio.write("\t}\n")
             else:
-                strio.write("\t\t\t" + self.generate_clause(clause.clauses[0]))  # clause.clauses[0].to_sparql())
+                strio.write("\t\t\t" + self.generate_clause(clause.components[0]))  # clause.clauses[0].to_sparql())
 
             return strio.getvalue()
         elif isinstance(clause, DisjunctiveClause):
             strio = StringIO()
-            if len(clause.clauses) > 1:
+            if len(clause.components) > 1:
                 strio.write("\t{\n")
 
                 strio.write("\t\t{\n")
-                strio.write("\t\t\t" + self.generate_clause(clause.clauses[0]))  # clause.clauses[0].to_sparql())
+                strio.write("\t\t\t" + self.generate_clause(clause.components[0]))  # clause.clauses[0].to_sparql())
                 strio.write("\t\t}\n")
 
                 strio.write("\tUNION {\n")
-                for constraint in clause.clauses[1:]:
+                for constraint in clause.components[1:]:
                     strio.write("\t\t\t" + self.generate_clause(constraint))  # constraint.to_sparql())
                 strio.write("\t\t}\n")
                 strio.write("\t}\n")
             else:
                 strio.write("\tUNION {\n")
-                strio.write("\t\t\t" + self.generate_clause(clause.clauses[0]))  # clause.clauses[0].to_sparql())
+                strio.write("\t\t\t" + self.generate_clause(clause.components[0]))  # clause.clauses[0].to_sparql())
                 strio.write("\t}\n")
             return strio.getvalue()
         else:
@@ -150,7 +150,7 @@ class SPARQLGenerator(Generator):
                 strio.write(self.generate_clause(clause))  # clause.to_sparql()
 
         else:
-            for clause in query.clauses:
+            for clause in query.components:
                 strio.write("\t" + self.generate_clause(clause))  # clause.to_sparql()
 
         if query.min_score:
