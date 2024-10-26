@@ -78,9 +78,9 @@ class Identifier(BaseModel):
     }
 
 class Variable(BaseModel):
-    value: str
+    symbol: str
 
-    @field_validator('value', mode='before')
+    @field_validator('symbol', mode='before')
     def validate_variable(cls, value: Any) -> str:
         if not isinstance(value, str):
             raise ValueError(f"Expected string, got {type(value)}")
@@ -92,7 +92,7 @@ class Variable(BaseModel):
         return value
 
     def __str__(self) -> str:
-        return self.value
+        return self.symbol
 
     model_config = {
         "frozen": True
@@ -117,6 +117,9 @@ class Value(BaseModel):
         "frozen": True
     }
 
+class ConstraintVariable(Variable):
+    constraint: Value
+
 # Predefined identifiers
 RDF_TYPE = Identifier(value=str(RDF.type))
 RDFS_LABEL = Identifier(value=str(RDFS.label))
@@ -128,12 +131,21 @@ Subject = Union[Identifier, Variable]
 Property = Identifier
 Argument = Union[Value,Identifier, Variable]
 
-class BaseClause(BaseModel, ABC):
-    # subject: Optional[Subject] = None
+class Clause(BaseModel, ABC):
+    #subject: Optional[Subject] = None
     optional: bool = False
 
+
     @abstractmethod
-    def subject(self) -> Optional[Subject]:
+    def _subject(self) -> Optional[Subject]:
+        pass
+
+    @abstractmethod
+    def _property(self) -> Optional[Property]:
+        pass
+
+    @abstractmethod
+    def _argument(self) -> Optional[Argument]:
         pass
 
     def is_defined(self) -> bool:
@@ -144,8 +156,8 @@ class BaseClause(BaseModel, ABC):
     }
 
 
-class AtomicClause(BaseClause):
-    subject: Optional[Subject] = None
+class AtomicClause(Clause):
+    subject: Subject
     property: Identifier
     argument: Argument
     #variable: Optional[Variable] = None
@@ -163,6 +175,15 @@ class AtomicClause(BaseClause):
     #         raise ValueError("Either argument or variable must be set")
     #     return self
 
+    def _subject(self) -> Optional[Subject]:
+        return self.subject
+
+    def _property(self) -> Optional[Property]:
+        return self.property
+
+    def _argument(self) -> Optional[Argument]:
+        return self.argument
+
     def n3(self) -> str:
         # subj = self.subject.n3() if isinstance(self.subject, Identifier) else str(self.subject)
         # pred = self.property.n3() if isinstance(self.property, Identifier) else f"<{self.property}>"
@@ -174,22 +195,58 @@ class AtomicClause(BaseClause):
         #     raise ValueError("Invalid clause")
         return f"{self.subject.n3()} {self.property.n3()} {self.argument.n3()}"
 
-class CompositeClause(BaseClause):
-    components: List[BaseClause] = Field(default_factory=list)
+class CompositeClause(Clause):
+    components: List[Clause] = Field(default_factory=list)
 
-    def add(self, clause: BaseClause) -> 'CompositeClause':
+    @field_validator('components', mode='before')
+    def validate_components(cls, value: Any) -> List[Clause]:
+        if not isinstance(value, list):
+            raise ValueError(f"Expected list, got {type(value)}")
+        if not value:
+            return value
+        subject = value[0].subject
+        if not all(clause.subject == subject for clause in value):
+            raise ValueError("All clauses in composite must have the same subject")
+        return value
+
+    def add(self, clause: Clause) -> 'CompositeClause':
+        # if clause.subject is None:
+        #     clause.subject = self.subject
+        # elif clause.subject != self.subject:
+        #     raise Exception("Component clause must have same subject")
         self.components.append(clause)
         return self
 
-    def first(self) -> Optional[BaseClause]:
+    def first(self) -> Optional[Clause]:
         if self.components:
             return self.components[0]
         else:
             return None
 
-    def last(self) -> Optional[BaseClause]:
+    def last(self) -> Optional[Clause]:
         if self.components:
             return self.components[-1]
+        else:
+            return None
+
+    def _subject(self) -> Optional[Subject]:
+        last = self.last()
+        if last:
+            return last._subject()
+        else:
+            return None
+
+    def _property(self) -> Optional[Property]:
+        last = self.last()
+        if last:
+            return last._property()
+        else:
+            return None
+
+    def _argument(self) -> Optional[Argument]:
+        last = self.last()
+        if last:
+            return last._argument()
         else:
             return None
 
@@ -199,16 +256,7 @@ class ConjunctiveClause(CompositeClause):
 class DisjunctiveClause(CompositeClause):
     type: ClassVar[str] = "union"
 
-    @field_validator('components', mode='before')
-    def validate_union_clauses(cls, value: Any) -> List[BaseClause]:
-        if not isinstance(value, list):
-            raise ValueError(f"Expected list, got {type(value)}")
-        if not value:
-            return value
-        subject = value[0].subject
-        if not all(clause.subject == subject for clause in value):
-            raise ValueError("All clauses in union must have the same subject")
-        return value
+
 
 class Generator(Protocol):
     def __init__(self, language: str, version: str = None):
@@ -218,7 +266,7 @@ class Generator(Protocol):
     def generate_query(self, query: SelectQuery, **kwargs) -> str:
         pass
 
-    def generate_clause(self, clause: BaseClause, **kwargs) -> str:
+    def generate_clause(self, clause: Clause, **kwargs) -> str:
         pass
 
 AnyClause = Union[AtomicClause, ConjunctiveClause, DisjunctiveClause]
@@ -233,10 +281,13 @@ class Select(CompositeClause):
                   subject: Subject = None,
                   optional: bool = False,
                   project: bool = False) -> AtomicClause:
-        subj = self.last().subject if subject is None else subject
-        assert subj is not None
-        prop = self.last().property if property is None else property
-        assert prop is not None
+
+        subj = self.last()._subject() if subject is None else subject
+        if subj is None:
+            raise ValueError("Subject must be specified")
+        prop = self.last()._property() if property is None else property
+        if prop is None:
+            raise ValueError("Property must be specified")
         new_atom = AtomicClause(subject=subj,
                                 property=prop,
                                 operator=operation,
@@ -266,7 +317,13 @@ class Select(CompositeClause):
                   subject: Subject = None,
                   optional: bool = False,
                   project: bool = False) -> 'Select':
-        new_atom = self._new_atom(operation, argument, property, subject, optional, project)
+        new_atom = self._new_atom(
+            operation=operation,
+            argument=argument,
+            property=property,
+            subject=subject,
+            optional=optional,
+            project=project)
         last_component = self.last()
         if isinstance(last_component, AtomicClause):
             self.components = [ConjunctiveClause(components=[last_component, new_atom])]
@@ -395,7 +452,7 @@ class SelectQuery(BaseModel):
     #     return self
 
     def project_clauses(self) -> List[AtomicClause]:
-        def _project_clauses(c: BaseClause, _clauses: List[AtomicClause]) -> None:
+        def _project_clauses(c: Clause, _clauses: List[AtomicClause]) -> None:
             if isinstance(c, AtomicClause) and c.project:
                 _clauses.append(c)
             elif isinstance(c, (ConjunctiveClause, DisjunctiveClause)):
@@ -408,10 +465,10 @@ class SelectQuery(BaseModel):
         return project_clauses
 
     def project_vars(self) -> set[str]:
-        def _project_vars(c: BaseClause, _vars: List[str]) -> None:
+        def _project_vars(c: Clause, _vars: List[str]) -> None:
             if isinstance(c, AtomicClause) and c.project:
                 if c.arg_variable():
-                    _vars.append(c.argument)
+                    _vars.append(c.argument.symbol)
             elif isinstance(c, CompositeClause):
                 for sc in c.components:
                     _project_vars(sc, _vars)
@@ -453,7 +510,7 @@ class UnarySelectQuery(SelectQuery):
             # Add RDF type clause for the first kind
             self.select.and_where(subject=self.subject,
                 property=RDF_TYPE,
-                argument=Identifier(value=self.kinds[0]),
+                argument=self.kinds[0],
                 operation=Comparison.EXACT,
                 project=False
             )
@@ -462,7 +519,7 @@ class UnarySelectQuery(SelectQuery):
             if len(self.kinds) > 1:
                 for kind in self.kinds[1:]:
                     self.select.or_where(property=RDF_TYPE,
-                         argument=Identifier(value=kind),
+                         argument=kind,
                          operation=Comparison.EXACT)
 
                 # kind_union = DisjunctiveClause(subject=self.subject)
