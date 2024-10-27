@@ -77,6 +77,10 @@ class Identifier(BaseModel):
         "frozen": True
     }
 
+def ID(value: str) -> Identifier:
+    return Identifier(value=value)
+
+
 class Variable(BaseModel):
     symbol: str
 
@@ -97,6 +101,11 @@ class Variable(BaseModel):
     model_config = {
         "frozen": True
     }
+
+def VAR(value: str, constr: Value = None) -> Variable:
+    if constr:
+        return ConstraintVariable(symbol=value, constraint=constr)
+    return Variable(symbol=value)
 
 class Value(BaseModel):
     value: Union[str, int, float]
@@ -311,9 +320,9 @@ class Select(CompositeClause):
 
 
     def and_where(self,
-                  operation: Comparison,
+                  property: Property,
                   argument: Argument,
-                  property: Property = None,
+                  operation: Comparison = Comparison.ANY,
                   subject: Subject = None,
                   optional: bool = False,
                   project: bool = False) -> 'Select':
@@ -381,10 +390,10 @@ class SelectQuery(BaseModel):
     def where(self,
               subject: Subject,
               property: Property,
-              operation: Comparison,
               argument: Argument,
+              operation: Comparison = Comparison.ANY,
               optional: bool = False,
-              project: bool = False) -> 'Select':
+              project: bool = True) -> 'Select':
         new_clause = AtomicClause(subject=subject,
                                   property=property,
                                   operator=operation,

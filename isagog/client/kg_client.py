@@ -11,8 +11,8 @@ from typing import Type, TypeVar
 import httpx
 from dotenv import load_dotenv
 
-from isagog.model.kg_model import Individual, Entity, Assertion, Attribute, Concept, Relation, Reference
-from isagog.model.kg_query import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
+from isagog.model.kg_model import Individual, Assertion, Attribute, Concept, Relation, ID, KnowledgeObject
+from isagog.model.query_model import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
 from isagog.model.ontology import Ontology
 
 load_dotenv()
@@ -53,9 +53,9 @@ class KnowledgeBase(object):
         self.logger.info("Isagog KG client (%s) initialized on route %s", hex(id(self)), route)
 
     def get_entity(self,
-                   _id: Reference,
+                   _id: ID,
                    expand: bool = True,
-                   entity_type: Type[E] = Entity,
+                   entity_type: Type[E] = KnowledgeObject,
                    **kwargs
                    ) -> E | None:
         """
@@ -69,8 +69,8 @@ class KnowledgeBase(object):
 
         self.logger.debug("Fetching %s", _id)
 
-        if not issubclass(entity_type, Entity):
-            raise ValueError(f"{entity_type} not an Entity")
+        if not issubclass(entity_type, KnowledgeObject):
+            raise ValueError(f"{entity_type} not a KnowledgeObject")
 
         expand = "true" if expand else "false"
 
@@ -359,5 +359,5 @@ class KnowledgeBase(object):
         else:
             self.logger.warning("Individual %s doesn't need update", individual.id)
 
-    def delete_individual(self, _id: Reference, **kwargs):
+    def delete_individual(self, _id: ID, **kwargs):
         pass

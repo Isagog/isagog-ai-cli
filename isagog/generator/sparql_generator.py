@@ -5,9 +5,9 @@ SPARQL query generator
 from io import StringIO
 
 from isagog.model.kg_model import Assertion
-from isagog.model.kg_query import UnarySelectQuery, AtomicClause, Comparison, Variable, \
+from isagog.model.query_model import UnarySelectQuery, AtomicClause, Comparison, Variable, \
     ConjunctiveClause, DisjunctiveClause, _SCOREVAR, SelectQuery, META_PROPERTIES
-from isagog.model.kg_query import Generator, Clause
+from isagog.model.query_model import Generator, Clause
 
 
 class SPARQLGenerator(Generator):
