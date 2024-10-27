@@ -6,14 +6,15 @@
 from __future__ import annotations
 
 import re
-from isagog.model.kg_model import N3String
 from enum import Enum
-from typing import Protocol, List, Tuple, Union, Optional, ClassVar, Any
+from typing import Protocol, List, Tuple, Union, Optional, Any, Dict
 from urllib.parse import urlparse
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, Field, model_validator, field_validator
 from rdflib import RDF, RDFS, OWL, URIRef
+
+from isagog.model.kg_model import N3String
 
 DEFAULT_PREFIXES = [
     ("rdf", "http://www.w3.org/2000/01/rdf-schema"),
@@ -48,52 +49,47 @@ def is_uri(string: str) -> bool:
 def is_variable(string: str) -> bool:
     return string.startswith('?')
 
-class Identifier(BaseModel):
-    value: str
 
-    @field_validator('value', mode='before')
-    def validate_identifier(cls, value: Any) -> str:
-        try:
-            if isinstance(value, str):
-                if value.startswith('?'):
-                    raise ValueError("Identifier cannot be a variable")
-                URIRef(value)
-                return value
-            elif isinstance(value, (URIRef, N3String)):
-                return str(value)
-            elif isinstance(value, Identifier):
-                return value.value
-            raise ValueError(f"Unexpected type for Identifier {type(value)}")
-        except Exception as e:
-            raise ValueError(f"Invalid identifier: {e}")
+# class Identifier(BaseModel):
+#     value: N3String
+#
+#     def __init__(self, value: Union[str, URIRef]) -> None:
+#         super().__init__()
+#         self.value = N3String(value)
+#
+#     def __str__(self) -> str:
+#         return self.value
+#
+#     @classmethod
+#     def __validate__(cls, value: Any) -> Any:
+#         if isinstance(value, (str, URIRef)):
+#             return cls(value=value)
+#         return value
+#
+#     @field_validator('value')
+#     def validate_value(cls, v: str) -> str:
+#         if not v:  # se vuoi verificare che non sia vuota
+#             raise ValueError("Identifier cannot be empty")
+#         return v
 
-    def __str__(self) -> str:
-        return self.value
 
-    def n3(self) -> str:
-        return URIRef(self.value).n3()
-
-    model_config = {
-        "frozen": True
-    }
-
-def ID(value: str) -> Identifier:
-    return Identifier(value=value)
+ID = N3String
 
 
 class Variable(BaseModel):
     symbol: str
 
+    @classmethod
     @field_validator('symbol', mode='before')
-    def validate_variable(cls, value: Any) -> str:
-        if not isinstance(value, str):
-            raise ValueError(f"Expected string, got {type(value)}")
-        if not value.startswith('?'):
-            value = f"?{value}"
+    def validate_variable(cls, symbol: Any) -> str:
+        if not isinstance(symbol, str):
+            raise ValueError(f"Expected string, got {type(symbol)}")
+        if not symbol.startswith('?'):
+            symbol = f"?{symbol}"
         pattern = r'^[a-zA-Z0-9_?]+$'
-        if not re.match(pattern, value):
-            raise ValueError(f"Invalid variable name {value}")
-        return value
+        if not re.match(pattern, symbol):
+            raise ValueError(f"Invalid variable name {symbol}")
+        return symbol
 
     def __str__(self) -> str:
         return self.symbol
@@ -101,6 +97,8 @@ class Variable(BaseModel):
     model_config = {
         "frozen": True
     }
+
+
 
 def VAR(value: str, constr: Value = None) -> Variable:
     if constr:
@@ -110,6 +108,7 @@ def VAR(value: str, constr: Value = None) -> Variable:
 class Value(BaseModel):
     value: Union[str, int, float]
 
+    @classmethod
     @field_validator('value', mode='before')
     def validate_value(cls, value: Any) -> Union[str, int, float]:
         if isinstance(value, str):
@@ -130,20 +129,18 @@ class ConstraintVariable(Variable):
     constraint: Value
 
 # Predefined identifiers
-RDF_TYPE = Identifier(value=str(RDF.type))
-RDFS_LABEL = Identifier(value=str(RDFS.label))
-OWL_CLASS = Identifier(value=str(OWL.Class))
-OWL_INDIVIDUAL = Identifier(value=str(OWL.NamedIndividual))
+RDF_TYPE = ID(RDF.type)
+RDFS_LABEL = ID(RDFS.label)
+OWL_CLASS = ID(OWL.Class)
+OWL_INDIVIDUAL = ID(OWL.NamedIndividual)
 
 
-Subject = Union[Identifier, Variable]
-Property = Identifier
-Argument = Union[Value,Identifier, Variable]
+Subject = Union[ID, Variable]
+Property = ID
+Argument = Union[Value,ID, Variable]
 
 class Clause(BaseModel, ABC):
-    #subject: Optional[Subject] = None
     optional: bool = False
-
 
     @abstractmethod
     def _subject(self) -> Optional[Subject]:
@@ -158,31 +155,27 @@ class Clause(BaseModel, ABC):
         pass
 
     def is_defined(self) -> bool:
-        return self.subject() is not None
+        return self._subject() is not None
 
-    model_config = {
-        "extra": "forbid"
-    }
-
+    class Config:
+        arbitrary_types_allowed = True
 
 class AtomicClause(Clause):
-    subject: Subject
-    property: Identifier
-    argument: Argument
-    #variable: Optional[Variable] = None
-    operator: Comparison = Comparison.ANY
+    subject: Subject = Field(default_factory=lambda: Variable(symbol="_SUBJVAR"))
+    property: ID = Field(default_factory=lambda: ID(""))
+    argument: Argument = Field(default_factory=lambda: Value(value=""))
+    operator: Comparison = Field(default=Comparison.ANY)
     project: bool = True
     optional: bool = False
-    type: ClassVar[str] = "atomic"
 
     def arg_variable(self) -> bool:
         return isinstance(self.argument, Variable)
 
-    # @model_validator(mode='after')
-    # def validate_argument_variable(self) -> 'AtomicClause':
-    #     if self.argument is None and self.variable is None:
-    #         raise ValueError("Either argument or variable must be set")
-    #     return self
+    @model_validator(mode='after')
+    def validate_argument_variable(cls, values):
+        if values.argument is None:
+            raise ValueError("Argument must be set")
+        return values
 
     def _subject(self) -> Optional[Subject]:
         return self.subject
@@ -194,19 +187,26 @@ class AtomicClause(Clause):
         return self.argument
 
     def n3(self) -> str:
-        # subj = self.subject.n3() if isinstance(self.subject, Identifier) else str(self.subject)
-        # pred = self.property.n3() if isinstance(self.property, Identifier) else f"<{self.property}>"
-        # if self.argument:
-        #     val = self.argument.n3() if isinstance(self.argument, Identifier) else str(self.argument)
-        # elif self.variable:
-        #     val = str(self.variable)
-        # else:
-        #     raise ValueError("Invalid clause")
         return f"{self.subject.n3()} {self.property.n3()} {self.argument.n3()}"
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def model_dump(self, **kwargs) -> dict[str, Any]:
+        return {
+            "subject": self.subject,
+            "property": self.property,
+            "argument": self.argument,
+            "operator": self.operator.value,
+            "optional": self.optional,
+            "project": self.project
+        }
 
 class CompositeClause(Clause):
     components: List[Clause] = Field(default_factory=list)
+    op: str = None
 
+    @classmethod
     @field_validator('components', mode='before')
     def validate_components(cls, value: Any) -> List[Clause]:
         if not isinstance(value, list):
@@ -258,12 +258,27 @@ class CompositeClause(Clause):
             return last._argument()
         else:
             return None
+    class Config:
+        arbitrary_types_allowed = True
+
 
 class ConjunctiveClause(CompositeClause):
-    type: ClassVar[str] = "conjunction"
+    op: str = "AND"
+
+    def n3(self) -> str:
+        return f"{' . '.join([c.n3() for c in self.components])}"
+
+    class Config:
+        arbitrary_types_allowed = True
+
 
 class DisjunctiveClause(CompositeClause):
-    type: ClassVar[str] = "union"
+    op: str = "OR"
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
 
 
 
@@ -281,7 +296,6 @@ class Generator(Protocol):
 AnyClause = Union[AtomicClause, ConjunctiveClause, DisjunctiveClause]
 
 class Select(CompositeClause):
-
 
     def _new_atom(self,
                   operation: Comparison,
@@ -310,7 +324,7 @@ class Select(CompositeClause):
                   operation: Comparison,
                   argument: Argument,
                   subject: Subject = None):
-        subj = self.last().subject if subject is None else subject
+        subj = self.last()._subject() if subject is None else subject
         new_atom = AtomicClause(subject=subj,
                                 property=property,
                                 operator=operation,
@@ -318,6 +332,21 @@ class Select(CompositeClause):
         new_select = Select().add(new_atom)
         return new_select
 
+    def where(self,
+              property: Property,
+              argument: Argument,
+              subject: Subject = VAR(_SUBJVAR),
+              operation: Comparison = Comparison.ANY,
+              optional: bool = False,
+              project: bool = True) -> 'Select':
+        new_clause = AtomicClause(subject=subject,
+                                  property=property,
+                                  operator=operation,
+                                  argument=argument,
+                                  optional=optional,
+                                  project=project)
+        self.components.append(new_clause)
+        return self
 
     def and_where(self,
                   property: Property,
@@ -335,7 +364,7 @@ class Select(CompositeClause):
             project=project)
         last_component = self.last()
         if isinstance(last_component, AtomicClause):
-            self.components = [ConjunctiveClause(components=[last_component, new_atom])]
+            self.components.append(new_atom)
         elif isinstance(last_component, CompositeClause):
             last_component.add(new_atom)
         else:
@@ -368,6 +397,9 @@ class Select(CompositeClause):
 
         return self._new_select(property, operation,argument,subject)
 
+    class Config:
+        arbitrary_types_allowed = True
+
 
 
 class SelectQuery(BaseModel):
@@ -378,87 +410,11 @@ class SelectQuery(BaseModel):
     lang: str = "en"
     min_score: Optional[float] = None
 
-    model_config = {
-        "extra": "forbid",
-        "validate_assignment": True
-    }
 
     def add_prefix(self, prefix: str, uri: str) -> None:
         if not any(existing_prefix == prefix for existing_prefix, _ in self.prefixes):
             self.prefixes.append((prefix, uri))
 
-    def where(self,
-              subject: Subject,
-              property: Property,
-              argument: Argument,
-              operation: Comparison = Comparison.ANY,
-              optional: bool = False,
-              project: bool = True) -> 'Select':
-        new_clause = AtomicClause(subject=subject,
-                                  property=property,
-                                  operator=operation,
-                                  argument=argument,
-                                  optional=optional,
-                                  project=project)
-        self.select.components.append(new_clause)
-        return self.select
-
-
-
-    # def add(self, clauses: Union[AnyClause, List[AnyClause]], **kwargs) -> None:
-    #     if isinstance(clauses, List):
-    #         clause_type = kwargs.get('type', 'conjunction')
-    #         if clause_type == 'conjunction':
-    #             list_clause = ConjunctiveClause(
-    #                 clauses=clauses,
-    #                 optional=kwargs.get('optional', False)
-    #             )
-    #         elif clause_type == 'union':
-    #             list_clause = DisjunctiveClause(
-    #                 subject=kwargs.get('subject'),
-    #                 clauses=clauses
-    #             )
-    #         else:
-    #             raise ValueError('unknown list clause type')
-    #         self.clauses.append(list_clause)
-    #     elif isinstance(clauses, AtomicClause) and clauses.method == Comparison.KEYWORD:
-    #         self.clauses.insert(0, clauses)
-    #     else:
-    #         self.clauses.append(clauses)
-    #
-    # def clause(
-    #     self,
-    #     property: Union[Identifier, str],
-    #     subject: Optional[Union[Identifier, Variable, str]] = None,
-    #     argument: Optional[Union[str, int, float, Value, Identifier, Variable]] = None,
-    #     variable: Optional[Union[Variable, str]] = None,
-    #     method: Comparison = Comparison.ANY,
-    #     project: bool = True,
-    #     optional: bool = False
-    # ) -> 'SelectQuery':
-    #     if isinstance(property, str):
-    #         property = Identifier(value=property)
-    #
-    #     if isinstance(subject, str):
-    #         subject = Variable(value=subject) if subject.startswith('?') else Identifier(value=subject)
-    #
-    #     if argument and not isinstance(argument, (Value, Identifier, Variable)):
-    #         argument = Value(value=argument)
-    #
-    #     if variable and not isinstance(variable, Variable):
-    #         variable = Variable(value=variable)
-    #
-    #     atomic_clause = AtomicClause(
-    #         property=property,
-    #         subject=subject,
-    #         argument=argument,
-    #         variable=variable,
-    #         method=method,
-    #         project=project,
-    #         optional=optional
-    #     )
-    #     self.add(atomic_clause)
-    #     return self
 
     def project_clauses(self) -> List[AtomicClause]:
         def _project_clauses(c: Clause, _clauses: List[AtomicClause]) -> None:
@@ -501,115 +457,47 @@ class SelectQuery(BaseModel):
     def generate(self, generator: Generator) -> str:
         return generator.generate_query(self)
 
-    def to_dict(self, **kwargs) -> dict:
-        return self.model_dump(**kwargs)
+    def model_dump(self, **kwargs) -> dict:
+        return {
+            "prefixes": self.prefixes,
+            "select": [c.model_dump(**kwargs) for c in self.select.components],
+            "graph": self.graph,
+            "limit": self.limit,
+            "lang": self.lang,
+            "min_score": self.min_score
+        }
+
 
 class UnarySelectQuery(SelectQuery):
-    subject: Subject = None
-    kinds: Optional[List[Identifier]] = None
-
+    subject: Subject = VAR(_SUBJVAR)
+    kind: Optional[Union[ID,List[ID]]] = None
+    prefixes: Optional[Dict] = None
 
     @model_validator(mode='after')
     def setup(self) -> 'UnarySelectQuery':
-        self.where(subject=self.subject,
+        kinds = [OWL_INDIVIDUAL]
+        if self.kind:
+            if isinstance(self.kind, ID):
+                kinds.append(self.kind)
+            elif isinstance(self.kind, list):
+                kinds.extend(self.kind)
+            else:
+                raise ValueError("Invalid kind")
+
+        self.select.where(subject=self.subject,
                    property=RDF_TYPE,
                    operation=Comparison.EXACT,
-                   argument=OWL_INDIVIDUAL)
-        if self.kinds:
+                   argument=kinds.pop())
+        for kind in kinds:
             # Add RDF type clause for the first kind
             self.select.and_where(subject=self.subject,
                 property=RDF_TYPE,
-                argument=self.kinds[0],
+                argument=kind,
                 operation=Comparison.EXACT,
                 project=False
             )
-
-            # Add union clause for additional kinds
-            if len(self.kinds) > 1:
-                for kind in self.kinds[1:]:
-                    self.select.or_where(property=RDF_TYPE,
-                         argument=kind,
-                         operation=Comparison.EXACT)
-
-                # kind_union = DisjunctiveClause(subject=self.subject)
-                # for kind in self.kinds[1:]:
-                #     kind_union.add(AtomicClause(
-                #         property=RDF_TYPE,
-                #         argument=Identifier(value=kind),
-                #         operator=Comparison.EXACT
-                #     ))
-                # self.add(kind_union)
         return self
 
-    # def clause(
-    #     self,
-    #     property: Union[Identifier, str],
-    #     subject: Optional[Union[Identifier, Variable, str]] = None,
-    #     argument: Optional[Union[str, int, float, Value, Identifier, Variable]] = None,
-    #     variable: Optional[Union[Variable, str]] = None,
-    #     method: Comparison = Comparison.ANY,
-    #     project: bool = True,
-    #     optional: bool = False
-    # ) -> 'UnarySelectQuery':
-    #     if subject is None:
-    #         subject = self.subject
-    #     super().clause(
-    #         property=property,
-    #         subject=subject,
-    #         argument=argument,
-    #         variable=variable,
-    #         method=method,
-    #         project=project,
-    #         optional=optional
-    #     )
-    #     return self
-    #
-    # def add_match_clause(
-    #     self,
-    #     predicate: Identifier,
-    #     argument: Union[str, int, float, Value, Identifier],
-    #     method: Comparison = Comparison.EXACT,
-    #     project: bool = False,
-    #     optional: bool = False
-    # ) -> None:
-    #     if not isinstance(argument, (Value, Identifier)):
-    #         argument = Value(value=argument)
-    #     self.add(AtomicClause(
-    #         subject=self.subject,
-    #         property=predicate,
-    #         argument=argument,
-    #         method=method,
-    #         project=project,
-    #         optional=optional
-    #     ))
-    #
-    # def add_fetch_clause(
-    #     self,
-    #     predicate: Identifier,
-    #     variable: Optional[Variable] = None
-    # ) -> None:
-    #     if variable is None:
-    #         variable = Variable(value=str(random.randint(0, 1000000)))
-    #     self.add(AtomicClause(
-    #         subject=self.subject,
-    #         property=predicate,
-    #         variable=variable,
-    #         method=Comparison.ANY,
-    #         project=True,
-    #         optional=True
-    #     ))
 
-    # def get_kinds(self) -> List[Identifier]:
-    #     return [c.argument for c in self.atom_clauses()
-    #             if isinstance(c, AtomicClause) and
-    #             c.property == RDF_TYPE and
-    #             isinstance(c.argument, Identifier)]
-    #
-    # def is_scored(self) -> bool:
-    #     return any(isinstance(c, AtomicClause) and c.method == Comparison.KEYWORD
-    #               for c in self.clauses)
-    #
-    # @classmethod
-    # def new(cls, data: dict) -> 'UnarySelectQuery':
-    #     return cls.model_validate(data)
+
 
