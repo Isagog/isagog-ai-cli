@@ -6,12 +6,12 @@
 from __future__ import annotations
 
 import re
+from abc import abstractmethod
 from enum import Enum
-from typing import Protocol, List, Tuple, Union, Optional, Any, Dict
+from typing import Protocol, List, Union, Optional, Any, Dict
 from urllib.parse import urlparse
-from abc import ABC, abstractmethod
 
-from pydantic import BaseModel, Field, model_validator, field_validator, computed_field
+from pydantic import BaseModel, Field, model_validator, field_validator
 from rdflib import RDF, RDFS, OWL, URIRef
 
 from isagog.model.kg_model import N3String
@@ -186,11 +186,11 @@ class AtomicClause(Clause):
         return self.argument
 
 class CompositeClause(Clause):
-    components: List[AnyClause] = Field(default_factory=list)
+    clauses: List[AnyClause] = Field(default_factory=list)
     op: str = None
 
     @classmethod
-    @field_validator('components', mode='before')
+    @field_validator('clauses', mode='before')
     def validate_components(cls, value: Any) -> List[Clause]:
         if not isinstance(value, list):
             raise ValueError(f"Expected list, got {type(value)}")
@@ -202,18 +202,18 @@ class CompositeClause(Clause):
         return value
 
     def add(self, clause: Clause) -> 'CompositeClause':
-        self.components.append(clause)
+        self.clauses.append(clause)
         return self
 
     def first(self) -> Optional[Clause]:
-        if self.components:
-            return self.components[0]
+        if self.clauses:
+            return self.clauses[0]
         else:
             return None
 
     def last(self) -> Optional[Clause]:
-        if self.components:
-            return self.components[-1]
+        if self.clauses:
+            return self.clauses[-1]
         else:
             return None
 
@@ -243,7 +243,7 @@ class ConjunctiveClause(CompositeClause):
     op: str = "AND"
 
     def n3(self) -> str:
-        return f"{' . '.join([c.n3() for c in self.components])}"
+        return f"{' . '.join([c.n3() for c in self.clauses])}"
 
 
 
@@ -251,16 +251,9 @@ class DisjunctiveClause(CompositeClause):
     op: str = "OR"
 
 
-AnyClause = Union[AtomicClause, ConjunctiveClause, DisjunctiveClause]
+AnyClause = Union[AtomicClause, CompositeClause, ConjunctiveClause, DisjunctiveClause]
 
-class SelectQuery(BaseModel):
-    prefixes: List[Tuple[str, str]] = Field(default_factory=lambda: DEFAULT_PREFIXES.copy())
-    clauses: List[AnyClause] = Field(default_factory=list)
-    graph: str = "defaultGraph"
-    limit: int = -1
-    lang: str = "en"
-    min_score: Optional[float] = None
-
+class Select(CompositeClause):
 
     def add_prefix(self, prefix: str, uri: str) -> None:
         if not any(existing_prefix == prefix for existing_prefix, _ in self.prefixes):
@@ -303,14 +296,17 @@ class SelectQuery(BaseModel):
               subject: Subject = Variable.new(_SUBJVAR),
               operation: Comparison = Comparison.ANY,
               optional: bool = False,
-              project: bool = True) -> 'SelectQuery':
+              project: bool = True) -> 'Select':
         new_clause = AtomicClause(subject=subject,
                                   property=property,
                                   operator=operation,
                                   argument=argument,
                                   optional=optional,
                                   project=project)
-        self.clauses.append(new_clause)
+        if not self.clauses:
+            self.clauses.append(new_clause)
+        else:
+            raise Exception("Illegal call to where")
         return self
 
     def and_where(self,
@@ -319,7 +315,7 @@ class SelectQuery(BaseModel):
                   operation: Comparison = Comparison.ANY,
                   subject: Subject = None,
                   optional: bool = False,
-                  project: bool = False) -> 'SelectQuery':
+                  project: bool = False) -> 'Select':
         new_atom = self._new_atom(
             operation=operation,
             argument=argument,
@@ -327,13 +323,16 @@ class SelectQuery(BaseModel):
             subject=subject if subject else self.last()._subject(),
             optional=optional,
             project=project)
-        last_component = self.last()
-        if isinstance(last_component, AtomicClause):
+        if self.op is None:
+            last = self.clauses.pop()
+            self.clauses.append(ConjunctiveClause(clauses= [last,new_atom]))
+        elif self.op == "AND":
             self.clauses.append(new_atom)
-        elif isinstance(last_component, CompositeClause):
-            last_component.add(new_atom)
+        elif self.op == "OR":
+            last = self.clauses.pop()
+            self.clauses.append(ConjunctiveClause(clauses=[last,new_atom]))
         else:
-            raise Exception("Malformed select: did you forget a 'where'?")
+            raise Exception("Illegal call to and_where")
         return self
 
     def or_where(self,
@@ -342,23 +341,28 @@ class SelectQuery(BaseModel):
                  operation: Comparison = Comparison.ANY,
                  subject: Subject = None,
                  optional: bool = False,
-                 project: bool = False) -> 'SelectQuery':
+                 project: bool = False) -> 'Select':
         new_atom = self._new_atom(operation, argument, property, subject, optional, project)
-        last_component = self.last()
-        if isinstance(last_component, AtomicClause):
-            self.clauses.append(DisjunctiveClause(components=[last_component, new_atom]))
-        elif isinstance(last_component, CompositeClause):
-            last_component.add(new_atom)
+        if self.op is None:
+            last = self.clauses.pop()
+            self.clauses.append(DisjunctiveClause(clauses=[last,new_atom]))
+        elif self.op == "OR":
+            self.clauses.append(new_atom)
+        elif self.op == "AND":
+            last = self.clauses.pop()
+            self.clauses.append(DisjunctiveClause(clauses=[last, new_atom]))
         else:
-            raise Exception(f"Unexpected clause type: {type(self.last())}")
+            raise Exception("Illegal call to or_where")
         return self
+
+
 
     def project_clauses(self) -> List[AtomicClause]:
         def _project_clauses(c: Clause, _clauses: List[AtomicClause]) -> None:
             if isinstance(c, AtomicClause) and c.project:
                 _clauses.append(c)
-            elif isinstance(c, (ConjunctiveClause, DisjunctiveClause)):
-                for sc in c.components:
+            elif isinstance(c, CompositeClause):
+                for sc in c.clauses:
                     _project_clauses(sc, _clauses)
 
         project_clauses = []
@@ -372,7 +376,7 @@ class SelectQuery(BaseModel):
                 if c.arg_variable():
                     _vars.append(c.argument.variable)
             elif isinstance(c, CompositeClause):
-                for sc in c.components:
+                for sc in c.clauses:
                     _project_vars(sc, _vars)
 
         _vars = []
@@ -380,54 +384,94 @@ class SelectQuery(BaseModel):
             _project_vars(c, _vars)
         return set(_vars)
 
-    def sort_clauses(self) -> 'SelectQuery':
+    def sort_clauses(self) -> 'Select':
         self.clauses = sorted(self.clauses, key=lambda clause: clause.optional)
         for clause in self.clauses:
             if isinstance(clause, CompositeClause):
-                clause.components = sorted(clause.components, key=lambda c: c.optional)
+                clause.clauses = sorted(clause.clauses, key=lambda c: c.optional)
         return self
 
+#
+# class UnarySelectQuery(SelectQuery):
+#     subject: Subject = Variable.new(_SUBJVAR)
+#     kind: Optional[Union[Identifier, List[Identifier]]] = None
+#     prefixes: Optional[Dict] = None
+#
+#     @model_validator(mode='after')
+#     def setup(self) -> 'UnarySelectQuery':
+#         kinds = [OWL_INDIVIDUAL]
+#         if self.kind:
+#             if isinstance(self.kind, Identifier):
+#                 kinds.append(self.kind)
+#             elif isinstance(self.kind, list):
+#                 kinds.extend(self.kind)
+#             else:
+#                 raise ValueError("Invalid kind")
+#
+#         self.clauses = []
+#
+#         # Add first RDF type clause
+#         self.clauses.append(AtomicClause(
+#             subject=self.subject,
+#             property=RDF_TYPE,
+#             operator=Comparison.EXACT,
+#             argument=kinds.pop()
+#         ))
+#
+#         # Add additional RDF type clauses
+#         for kind in kinds:
+#             self.clauses.append(AtomicClause(
+#                 subject=self.subject,
+#                 property=RDF_TYPE,
+#                 argument=kind,
+#                 operator=Comparison.EXACT,
+#                 project=False
+#             ))
+#
+#         return self
 
-class UnarySelectQuery(SelectQuery):
-    subject: Subject = Variable.new(_SUBJVAR)
-    kind: Optional[Union[Identifier, List[Identifier]]] = None
-    prefixes: Optional[Dict] = None
+class UnarySelectQuery(BaseModel):
+        prefixes: Optional[Dict] = None
+        query: Select = Select()
+        graph: str = "defaultGraph"
+        subject: Subject = Variable.new(_SUBJVAR)
+        kind: Optional[Union[Identifier, List[Identifier]]] = None
+        limit: int = -1
+        lang: str = "en"
+        min_score: Optional[float] = None
 
-    @model_validator(mode='after')
-    def setup(self) -> 'UnarySelectQuery':
-        kinds = [OWL_INDIVIDUAL]
-        if self.kind:
-            if isinstance(self.kind, Identifier):
-                kinds.append(self.kind)
-            elif isinstance(self.kind, list):
-                kinds.extend(self.kind)
-            else:
-                raise ValueError("Invalid kind")
+        @model_validator(mode='after')
+        def setup(self) -> 'UnarySelectQuery':
+            kinds = [OWL_INDIVIDUAL]
+            if self.kind:
+                if isinstance(self.kind, Identifier):
+                    kinds.append(self.kind)
+                elif isinstance(self.kind, list):
+                    kinds.extend(self.kind)
+                else:
+                    raise ValueError("Invalid kind")
 
-        self.clauses = []
+           # self.clauses = []
 
-        # Add first RDF type clause
-        self.clauses.append(AtomicClause(
-            subject=self.subject,
-            property=RDF_TYPE,
-            operator=Comparison.EXACT,
-            argument=kinds.pop()
-        ))
-
-        # Add additional RDF type clauses
-        for kind in kinds:
-            self.clauses.append(AtomicClause(
+            # Add first RDF type clause
+            self.query.and_where(
                 subject=self.subject,
                 property=RDF_TYPE,
-                argument=kind,
-                operator=Comparison.EXACT,
-                project=False
-            ))
+                operation=Comparison.EXACT,
+                argument=kinds.pop()
+            )
 
-        return self
+            # Add additional RDF type clauses
+            for kind in kinds:
+                self.query.or_where(
+                    subject=self.subject,
+                    property=RDF_TYPE,
+                    argument=kind,
+                    operation=Comparison.EXACT,
+                    project=False
+                )
 
-
-
+            return self
 
 
 class Generator(Protocol):
@@ -435,7 +479,7 @@ class Generator(Protocol):
         self.language = language
         self.version = version
 
-    def generate_query(self, query: SelectQuery, **kwargs) -> str:
+    def generate_query(self, query: Select, **kwargs) -> str:
         pass
 
     def generate_clause(self, clause: Clause, **kwargs) -> str:

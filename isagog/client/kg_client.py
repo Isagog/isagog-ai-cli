@@ -12,7 +12,7 @@ import httpx
 from dotenv import load_dotenv
 
 from isagog.model.kg_model import Individual, Assertion, Attribute, Concept, Relation, ID, KnowledgeObject
-from isagog.model.query_model import UnarySelectQuery, DisjunctiveClause, AtomicClause, Comparison, Value
+from isagog.model.query_model import UnarySelectQuery, AtomicClause, Comparison, Value, CompositeClause
 from isagog.model.ontology import Ontology
 
 load_dotenv()
@@ -210,7 +210,7 @@ class KnowledgeBase(object):
             attribute, value = next(iter(constraints.items()))
             search_clause = AtomicClause(property=attribute, argument=value, method=Comparison.REGEX)
         else:
-            search_clause = DisjunctiveClause()
+            search_clause = CompositeClause(op="OR")
             for attribute, value in constraints.items():
                 search_clause.add_atom(property=attribute, argument=value, method=Comparison.REGEX)
 

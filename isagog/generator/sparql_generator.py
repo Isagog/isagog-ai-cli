@@ -6,7 +6,7 @@ from io import StringIO
 
 from isagog.model.kg_model import Assertion
 from isagog.model.query_model import UnarySelectQuery, AtomicClause, Comparison, Variable, \
-    ConjunctiveClause, DisjunctiveClause, _SCOREVAR, SelectQuery, META_PROPERTIES
+    ConjunctiveClause, DisjunctiveClause, _SCOREVAR, Select, META_PROPERTIES
 from isagog.model.query_model import Generator, Clause
 
 
@@ -74,35 +74,35 @@ class SPARQLGenerator(Generator):
             return clause_str
         elif isinstance(clause, ConjunctiveClause):
             strio = StringIO()
-            if len(clause.components) > 1:
+            if len(clause.clauses) > 1:
                 if clause.optional:
                     strio.write("OPTIONAL")
                 strio.write("\t{\n")
-                for sub_clause in clause.components: #[1:]:
+                for sub_clause in clause.clauses: #[1:]:
                     strio.write("\t\t\t" + self.generate_clause(sub_clause))  # sub_clause.to_sparql())
                 strio.write("\t\t}\n")
                 # strio.write("\t}\n")
             else:
-                strio.write("\t\t\t" + self.generate_clause(clause.components[0]))  # clause.clauses[0].to_sparql())
+                strio.write("\t\t\t" + self.generate_clause(clause.clauses[0]))  # clause.clauses[0].to_sparql())
 
             return strio.getvalue()
         elif isinstance(clause, DisjunctiveClause):
             strio = StringIO()
-            if len(clause.components) > 1:
+            if len(clause.clauses) > 1:
                 strio.write("\t{\n")
 
                 strio.write("\t\t{\n")
-                strio.write("\t\t\t" + self.generate_clause(clause.components[0]))  # clause.clauses[0].to_sparql())
+                strio.write("\t\t\t" + self.generate_clause(clause.clauses[0]))  # clause.clauses[0].to_sparql())
                 strio.write("\t\t}\n")
 
                 strio.write("\tUNION {\n")
-                for constraint in clause.components[1:]:
+                for constraint in clause.clauses[1:]:
                     strio.write("\t\t\t" + self.generate_clause(constraint))  # constraint.to_sparql())
                 strio.write("\t\t}\n")
                 strio.write("\t}\n")
             else:
                 strio.write("\tUNION {\n")
-                strio.write("\t\t\t" + self.generate_clause(clause.components[0]))  # clause.clauses[0].to_sparql())
+                strio.write("\t\t\t" + self.generate_clause(clause.clauses[0]))  # clause.clauses[0].to_sparql())
                 strio.write("\t}\n")
             return strio.getvalue()
         else:
@@ -111,7 +111,7 @@ class SPARQLGenerator(Generator):
     def __init__(self):
         super().__init__("SPARQL")
 
-    def generate_query(self, query: SelectQuery, **kwargs) -> str:
+    def generate_query(self, query: Select, **kwargs) -> str:
         """
         Generates a SPARQL query from a SelectQuery
         :param query:
