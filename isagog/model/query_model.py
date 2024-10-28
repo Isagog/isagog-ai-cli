@@ -11,7 +11,7 @@ from typing import Protocol, List, Tuple, Union, Optional, Any, Dict
 from urllib.parse import urlparse
 from abc import ABC, abstractmethod
 
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator, computed_field
 from rdflib import RDF, RDFS, OWL, URIRef
 
 from isagog.model.kg_model import N3String
@@ -50,37 +50,32 @@ def is_variable(string: str) -> bool:
     return string.startswith('?')
 
 
-# class Identifier(BaseModel):
-#     value: N3String
-#
-#     def __init__(self, value: Union[str, URIRef]) -> None:
-#         super().__init__()
-#         self.value = N3String(value)
-#
-#     def __str__(self) -> str:
-#         return self.value
-#
-#     @classmethod
-#     def __validate__(cls, value: Any) -> Any:
-#         if isinstance(value, (str, URIRef)):
-#             return cls(value=value)
-#         return value
-#
-#     @field_validator('value')
-#     def validate_value(cls, v: str) -> str:
-#         if not v:  # se vuoi verificare che non sia vuota
-#             raise ValueError("Identifier cannot be empty")
-#         return v
+class Identifier(BaseModel):
+    id: N3String
 
+    def __str__(self) -> str:
+        return self.id
 
-ID = N3String
+    def n3(self):
+        return self.id.n3()
+
+    @field_validator('id')
+    def validate_value(cls, v: str) -> str:
+        if not v:
+            raise ValueError("Identifier cannot be empty")
+        return v
+
+    @staticmethod
+    def new(value: Union[str, URIRef]) -> Identifier:
+        return Identifier(id=N3String(value))
 
 
 class Variable(BaseModel):
-    symbol: str
+    variable: str
+    constraint: Optional[Value] = None
 
     @classmethod
-    @field_validator('symbol', mode='before')
+    @field_validator('variable', mode='before')
     def validate_variable(cls, symbol: Any) -> str:
         if not isinstance(symbol, str):
             raise ValueError(f"Expected string, got {type(symbol)}")
@@ -92,18 +87,30 @@ class Variable(BaseModel):
         return symbol
 
     def __str__(self) -> str:
-        return self.symbol
+        return self.variable
 
     model_config = {
         "frozen": True
     }
 
+    def model_dump(self, **kwargs) -> dict[str, Any]:
+        return {
+            "variable": self.variable
+        }
+
+    @classmethod
+    def model_construct(cls, _fields_set: set[str] | None = None, **values: Any) -> Variable:
+        return cls(variable=values.get("variable"))
+
+    @staticmethod
+    def new(value: str, constr: Union[str, int, float] = None) -> Variable:
+        if constr:
+            return Variable(variable=value, constraint=Value.new(constr))
+        return Variable(variable=value)
 
 
-def VAR(value: str, constr: Value = None) -> Variable:
-    if constr:
-        return ConstraintVariable(symbol=value, constraint=constr)
-    return Variable(symbol=value)
+
+
 
 class Value(BaseModel):
     value: Union[str, int, float]
@@ -125,21 +132,24 @@ class Value(BaseModel):
         "frozen": True
     }
 
-class ConstraintVariable(Variable):
-    constraint: Value
+
+    @staticmethod
+    def new(value: Union[str, int, float]) -> Value:
+        return Value(value=value)
+
 
 # Predefined identifiers
-RDF_TYPE = ID(RDF.type)
-RDFS_LABEL = ID(RDFS.label)
-OWL_CLASS = ID(OWL.Class)
-OWL_INDIVIDUAL = ID(OWL.NamedIndividual)
+RDF_TYPE = Identifier.new(RDF.type)
+RDFS_LABEL = Identifier.new(RDFS.label)
+OWL_CLASS = Identifier.new(OWL.Class)
+OWL_INDIVIDUAL = Identifier.new(OWL.NamedIndividual)
 
 
-Subject = Union[ID, Variable]
-Property = ID
-Argument = Union[Value,ID, Variable]
+Subject = Union[Identifier, Variable]
+Property = Identifier
+Argument = Union[Value,Identifier, Variable]
 
-class Clause(BaseModel, ABC):
+class Clause(BaseModel):
     optional: bool = False
 
     @abstractmethod
@@ -154,28 +164,17 @@ class Clause(BaseModel, ABC):
     def _argument(self) -> Optional[Argument]:
         pass
 
-    def is_defined(self) -> bool:
-        return self._subject() is not None
-
-    class Config:
-        arbitrary_types_allowed = True
 
 class AtomicClause(Clause):
-    subject: Subject = Field(default_factory=lambda: Variable(symbol="_SUBJVAR"))
-    property: ID = Field(default_factory=lambda: ID(""))
-    argument: Argument = Field(default_factory=lambda: Value(value=""))
+    subject: Subject = Field(default_factory=lambda: Variable.new(_SUBJVAR))
+    property: Identifier = Field(default_factory=lambda: Identifier.new(""))
+    argument: Argument = Field(default_factory=lambda: Value.new(""))
     operator: Comparison = Field(default=Comparison.ANY)
     project: bool = True
     optional: bool = False
 
-    def arg_variable(self) -> bool:
-        return isinstance(self.argument, Variable)
-
-    @model_validator(mode='after')
-    def validate_argument_variable(cls, values):
-        if values.argument is None:
-            raise ValueError("Argument must be set")
-        return values
+    def n3(self) -> str:
+        return f"{self.subject.n3()} {self.property.n3()} {self.argument.n3()}"
 
     def _subject(self) -> Optional[Subject]:
         return self.subject
@@ -186,24 +185,8 @@ class AtomicClause(Clause):
     def _argument(self) -> Optional[Argument]:
         return self.argument
 
-    def n3(self) -> str:
-        return f"{self.subject.n3()} {self.property.n3()} {self.argument.n3()}"
-
-    class Config:
-        arbitrary_types_allowed = True
-
-    def model_dump(self, **kwargs) -> dict[str, Any]:
-        return {
-            "subject": self.subject,
-            "property": self.property,
-            "argument": self.argument,
-            "operator": self.operator.value,
-            "optional": self.optional,
-            "project": self.project
-        }
-
 class CompositeClause(Clause):
-    components: List[Clause] = Field(default_factory=list)
+    components: List[AnyClause] = Field(default_factory=list)
     op: str = None
 
     @classmethod
@@ -219,10 +202,6 @@ class CompositeClause(Clause):
         return value
 
     def add(self, clause: Clause) -> 'CompositeClause':
-        # if clause.subject is None:
-        #     clause.subject = self.subject
-        # elif clause.subject != self.subject:
-        #     raise Exception("Component clause must have same subject")
         self.components.append(clause)
         return self
 
@@ -258,8 +237,6 @@ class CompositeClause(Clause):
             return last._argument()
         else:
             return None
-    class Config:
-        arbitrary_types_allowed = True
 
 
 class ConjunctiveClause(CompositeClause):
@@ -268,34 +245,27 @@ class ConjunctiveClause(CompositeClause):
     def n3(self) -> str:
         return f"{' . '.join([c.n3() for c in self.components])}"
 
-    class Config:
-        arbitrary_types_allowed = True
 
 
 class DisjunctiveClause(CompositeClause):
     op: str = "OR"
 
-    class Config:
-        arbitrary_types_allowed = True
-
-
-
-
-
-class Generator(Protocol):
-    def __init__(self, language: str, version: str = None):
-        self.language = language
-        self.version = version
-
-    def generate_query(self, query: SelectQuery, **kwargs) -> str:
-        pass
-
-    def generate_clause(self, clause: Clause, **kwargs) -> str:
-        pass
 
 AnyClause = Union[AtomicClause, ConjunctiveClause, DisjunctiveClause]
 
-class Select(CompositeClause):
+class SelectQuery(BaseModel):
+    prefixes: List[Tuple[str, str]] = Field(default_factory=lambda: DEFAULT_PREFIXES.copy())
+    clauses: List[AnyClause] = Field(default_factory=list)
+    graph: str = "defaultGraph"
+    limit: int = -1
+    lang: str = "en"
+    min_score: Optional[float] = None
+
+
+    def add_prefix(self, prefix: str, uri: str) -> None:
+        if not any(existing_prefix == prefix for existing_prefix, _ in self.prefixes):
+            self.prefixes.append((prefix, uri))
+
 
     def _new_atom(self,
                   operation: Comparison,
@@ -319,33 +289,28 @@ class Select(CompositeClause):
                                 project=project)
         return new_atom
 
-    def _new_select(self,
-                  property: Property,
-                  operation: Comparison,
-                  argument: Argument,
-                  subject: Subject = None):
-        subj = self.last()._subject() if subject is None else subject
-        new_atom = AtomicClause(subject=subj,
-                                property=property,
-                                operator=operation,
-                                argument=argument)
-        new_select = Select().add(new_atom)
-        return new_select
+
+    def last(self) -> Optional[Clause]:
+        if self.clauses:
+            return self.clauses[-1]
+        else:
+            return None
+
 
     def where(self,
               property: Property,
               argument: Argument,
-              subject: Subject = VAR(_SUBJVAR),
+              subject: Subject = Variable.new(_SUBJVAR),
               operation: Comparison = Comparison.ANY,
               optional: bool = False,
-              project: bool = True) -> 'Select':
+              project: bool = True) -> 'SelectQuery':
         new_clause = AtomicClause(subject=subject,
                                   property=property,
                                   operator=operation,
                                   argument=argument,
                                   optional=optional,
                                   project=project)
-        self.components.append(new_clause)
+        self.clauses.append(new_clause)
         return self
 
     def and_where(self,
@@ -354,17 +319,17 @@ class Select(CompositeClause):
                   operation: Comparison = Comparison.ANY,
                   subject: Subject = None,
                   optional: bool = False,
-                  project: bool = False) -> 'Select':
+                  project: bool = False) -> 'SelectQuery':
         new_atom = self._new_atom(
             operation=operation,
             argument=argument,
             property=property,
-            subject=subject,
+            subject=subject if subject else self.last()._subject(),
             optional=optional,
             project=project)
         last_component = self.last()
         if isinstance(last_component, AtomicClause):
-            self.components.append(new_atom)
+            self.clauses.append(new_atom)
         elif isinstance(last_component, CompositeClause):
             last_component.add(new_atom)
         else:
@@ -372,49 +337,21 @@ class Select(CompositeClause):
         return self
 
     def or_where(self,
-                  operation: Comparison,
-                  argument: Argument,
-                  property: Property = None,
-                  subject: Subject = None,
-                  optional: bool = False,
-                  project: bool = False) -> 'Select':
+                 property: Property,
+                 argument: Argument,
+                 operation: Comparison = Comparison.ANY,
+                 subject: Subject = None,
+                 optional: bool = False,
+                 project: bool = False) -> 'SelectQuery':
         new_atom = self._new_atom(operation, argument, property, subject, optional, project)
         last_component = self.last()
         if isinstance(last_component, AtomicClause):
-            self.components = [DisjunctiveClause(components=[last_component, new_atom])]
+            self.clauses.append(DisjunctiveClause(components=[last_component, new_atom]))
         elif isinstance(last_component, CompositeClause):
             last_component.add(new_atom)
         else:
             raise Exception(f"Unexpected clause type: {type(self.last())}")
         return self
-
-
-    def and_where_select(self,
-                  property: Property,
-                  operation: Comparison,
-                  argument: Argument,
-                  subject: Subject = None) -> 'Select':
-
-        return self._new_select(property, operation,argument,subject)
-
-    class Config:
-        arbitrary_types_allowed = True
-
-
-
-class SelectQuery(BaseModel):
-    prefixes: List[Tuple[str, str]] = Field(default_factory=lambda: DEFAULT_PREFIXES.copy())
-    select: Select = Field(default_factory=Select)
-    graph: str = "defaultGraph"
-    limit: int = -1
-    lang: str = "en"
-    min_score: Optional[float] = None
-
-
-    def add_prefix(self, prefix: str, uri: str) -> None:
-        if not any(existing_prefix == prefix for existing_prefix, _ in self.prefixes):
-            self.prefixes.append((prefix, uri))
-
 
     def project_clauses(self) -> List[AtomicClause]:
         def _project_clauses(c: Clause, _clauses: List[AtomicClause]) -> None:
@@ -425,7 +362,7 @@ class SelectQuery(BaseModel):
                     _project_clauses(sc, _clauses)
 
         project_clauses = []
-        for c in self.select.components:
+        for c in self.clauses:  # Usiamo clauses invece di select.components
             _project_clauses(c, project_clauses)
         return project_clauses
 
@@ -433,71 +370,74 @@ class SelectQuery(BaseModel):
         def _project_vars(c: Clause, _vars: List[str]) -> None:
             if isinstance(c, AtomicClause) and c.project:
                 if c.arg_variable():
-                    _vars.append(c.argument.symbol)
+                    _vars.append(c.argument.variable)
             elif isinstance(c, CompositeClause):
                 for sc in c.components:
                     _project_vars(sc, _vars)
 
         _vars = []
-        for c in self.select.components:
+        for c in self.clauses:  # Usiamo clauses invece di select.components
             _project_vars(c, _vars)
         return set(_vars)
 
-    def has_return_vars(self) -> bool:
-        return len(self.project_vars()) > 0
-
     def sort_clauses(self) -> 'SelectQuery':
-        clauses = sorted(self.select.components, key=lambda clause: clause.optional)
-        for clause in clauses:
+        self.clauses = sorted(self.clauses, key=lambda clause: clause.optional)
+        for clause in self.clauses:
             if isinstance(clause, CompositeClause):
                 clause.components = sorted(clause.components, key=lambda c: c.optional)
-        self.select.components = clauses
         return self
-
-    def generate(self, generator: Generator) -> str:
-        return generator.generate_query(self)
-
-    def model_dump(self, **kwargs) -> dict:
-        return {
-            "prefixes": self.prefixes,
-            "select": [c.model_dump(**kwargs) for c in self.select.components],
-            "graph": self.graph,
-            "limit": self.limit,
-            "lang": self.lang,
-            "min_score": self.min_score
-        }
 
 
 class UnarySelectQuery(SelectQuery):
-    subject: Subject = VAR(_SUBJVAR)
-    kind: Optional[Union[ID,List[ID]]] = None
+    subject: Subject = Variable.new(_SUBJVAR)
+    kind: Optional[Union[Identifier, List[Identifier]]] = None
     prefixes: Optional[Dict] = None
 
     @model_validator(mode='after')
     def setup(self) -> 'UnarySelectQuery':
         kinds = [OWL_INDIVIDUAL]
         if self.kind:
-            if isinstance(self.kind, ID):
+            if isinstance(self.kind, Identifier):
                 kinds.append(self.kind)
             elif isinstance(self.kind, list):
                 kinds.extend(self.kind)
             else:
                 raise ValueError("Invalid kind")
 
-        self.select.where(subject=self.subject,
-                   property=RDF_TYPE,
-                   operation=Comparison.EXACT,
-                   argument=kinds.pop())
+        self.clauses = []
+
+        # Add first RDF type clause
+        self.clauses.append(AtomicClause(
+            subject=self.subject,
+            property=RDF_TYPE,
+            operator=Comparison.EXACT,
+            argument=kinds.pop()
+        ))
+
+        # Add additional RDF type clauses
         for kind in kinds:
-            # Add RDF type clause for the first kind
-            self.select.and_where(subject=self.subject,
+            self.clauses.append(AtomicClause(
+                subject=self.subject,
                 property=RDF_TYPE,
                 argument=kind,
-                operation=Comparison.EXACT,
+                operator=Comparison.EXACT,
                 project=False
-            )
+            ))
+
         return self
 
 
 
+
+
+class Generator(Protocol):
+    def __init__(self, language: str, version: str = None):
+        self.language = language
+        self.version = version
+
+    def generate_query(self, query: SelectQuery, **kwargs) -> str:
+        pass
+
+    def generate_clause(self, clause: Clause, **kwargs) -> str:
+        pass
 
