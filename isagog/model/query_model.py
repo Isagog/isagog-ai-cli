@@ -253,7 +253,7 @@ class DisjunctiveClause(CompositeClause):
 
 AnyClause = Union[AtomicClause, CompositeClause, ConjunctiveClause, DisjunctiveClause]
 
-class Select(CompositeClause):
+class Select(ConjunctiveClause):
 
     def add_prefix(self, prefix: str, uri: str) -> None:
         if not any(existing_prefix == prefix for existing_prefix, _ in self.prefixes):
@@ -297,9 +297,9 @@ class Select(CompositeClause):
               operation: Comparison = Comparison.ANY,
               optional: bool = False,
               project: bool = True) -> 'Select':
-        new_clause = AtomicClause(subject=subject,
+        new_clause = self._new_atom(subject=subject,
                                   property=property,
-                                  operator=operation,
+                                  operation=operation,
                                   argument=argument,
                                   optional=optional,
                                   project=project)
@@ -323,16 +323,10 @@ class Select(CompositeClause):
             subject=subject if subject else self.last()._subject(),
             optional=optional,
             project=project)
-        if self.op is None:
-            last = self.clauses.pop()
-            self.clauses.append(ConjunctiveClause(clauses= [last,new_atom]))
-        elif self.op == "AND":
-            self.clauses.append(new_atom)
-        elif self.op == "OR":
-            last = self.clauses.pop()
-            self.clauses.append(ConjunctiveClause(clauses=[last,new_atom]))
-        else:
+        if not self.clauses:
             raise Exception("Illegal call to and_where")
+        self.clauses.append(new_atom)
+
         return self
 
     def or_where(self,
@@ -342,17 +336,16 @@ class Select(CompositeClause):
                  subject: Subject = None,
                  optional: bool = False,
                  project: bool = False) -> 'Select':
+        if not self.clauses:
+            raise Exception("Illegal call to or_where")
         new_atom = self._new_atom(operation, argument, property, subject, optional, project)
-        if self.op is None:
-            last = self.clauses.pop()
-            self.clauses.append(DisjunctiveClause(clauses=[last,new_atom]))
-        elif self.op == "OR":
-            self.clauses.append(new_atom)
-        elif self.op == "AND":
+        if len(self.clauses) == 1:
             last = self.clauses.pop()
             self.clauses.append(DisjunctiveClause(clauses=[last, new_atom]))
         else:
-            raise Exception("Illegal call to or_where")
+            conj = ConjunctiveClause(clauses=self.clauses)
+            disj = DisjunctiveClause(clauses=[conj, new_atom])
+            self.clauses = [disj]
         return self
 
 
@@ -391,44 +384,6 @@ class Select(CompositeClause):
                 clause.clauses = sorted(clause.clauses, key=lambda c: c.optional)
         return self
 
-#
-# class UnarySelectQuery(SelectQuery):
-#     subject: Subject = Variable.new(_SUBJVAR)
-#     kind: Optional[Union[Identifier, List[Identifier]]] = None
-#     prefixes: Optional[Dict] = None
-#
-#     @model_validator(mode='after')
-#     def setup(self) -> 'UnarySelectQuery':
-#         kinds = [OWL_INDIVIDUAL]
-#         if self.kind:
-#             if isinstance(self.kind, Identifier):
-#                 kinds.append(self.kind)
-#             elif isinstance(self.kind, list):
-#                 kinds.extend(self.kind)
-#             else:
-#                 raise ValueError("Invalid kind")
-#
-#         self.clauses = []
-#
-#         # Add first RDF type clause
-#         self.clauses.append(AtomicClause(
-#             subject=self.subject,
-#             property=RDF_TYPE,
-#             operator=Comparison.EXACT,
-#             argument=kinds.pop()
-#         ))
-#
-#         # Add additional RDF type clauses
-#         for kind in kinds:
-#             self.clauses.append(AtomicClause(
-#                 subject=self.subject,
-#                 property=RDF_TYPE,
-#                 argument=kind,
-#                 operator=Comparison.EXACT,
-#                 project=False
-#             ))
-#
-#         return self
 
 class UnarySelectQuery(BaseModel):
         prefixes: Optional[Dict] = None
@@ -442,34 +397,38 @@ class UnarySelectQuery(BaseModel):
 
         @model_validator(mode='after')
         def setup(self) -> 'UnarySelectQuery':
-            kinds = [OWL_INDIVIDUAL]
-            if self.kind:
-                if isinstance(self.kind, Identifier):
-                    kinds.append(self.kind)
-                elif isinstance(self.kind, list):
-                    kinds.extend(self.kind)
-                else:
-                    raise ValueError("Invalid kind")
 
-           # self.clauses = []
-
-            # Add first RDF type clause
             self.query.and_where(
                 subject=self.subject,
                 property=RDF_TYPE,
                 operation=Comparison.EXACT,
-                argument=kinds.pop()
+                argument=OWL_INDIVIDUAL
             )
-
-            # Add additional RDF type clauses
-            for kind in kinds:
-                self.query.or_where(
-                    subject=self.subject,
-                    property=RDF_TYPE,
-                    argument=kind,
-                    operation=Comparison.EXACT,
-                    project=False
-                )
+            if self.kind:
+                if isinstance(self.kind, Identifier):
+                    self.query.and_where(
+                        subject=self.subject,
+                        property=RDF_TYPE,
+                        operation=Comparison.EXACT,
+                        argument=self.kind
+                    )
+                elif isinstance(self.kind, list):
+                    self.query.and_where(
+                        subject=self.subject,
+                        property=RDF_TYPE,
+                        operation=Comparison.EXACT,
+                        argument=self.kind.pop(0)
+                    )
+                    for kind in self.kind:
+                        self.query.or_where(
+                            subject=self.subject,
+                            property=RDF_TYPE,
+                            argument=kind,
+                            operation=Comparison.EXACT,
+                            project=False
+                        )
+                else:
+                    raise ValueError("Invalid kind")
 
             return self
 
