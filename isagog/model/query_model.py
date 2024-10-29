@@ -166,8 +166,8 @@ class Clause(BaseModel):
 
 
 class AtomicClause(Clause):
+    property: Identifier = Field(...)
     subject: Subject = Field(default_factory=lambda: Variable.new(_SUBJVAR))
-    property: Identifier = Field(default_factory=lambda: Identifier.new(""))
     argument: Argument = Field(default_factory=lambda: Value.new(""))
     operator: Comparison = Field(default=Comparison.ANY)
     project: bool = True
