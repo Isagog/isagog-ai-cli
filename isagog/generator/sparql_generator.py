@@ -2,12 +2,12 @@
 SPARQL query generator
 (c) Isagog S.r.l. 2024, MIT License
 """
+import logging
 from io import StringIO
 
-from isagog.model.kg_model import Assertion
-from isagog.model.query_model import UnarySelectQuery, AtomicClause, Comparison, Variable, \
-    ConjunctiveClause, DisjunctiveClause, _SCOREVAR, Select, META_PROPERTIES
 from isagog.model.query_model import Generator, Clause
+from isagog.model.query_model import Query, AtomicClause, Comparison, Variable, \
+    ConjunctiveClause, DisjunctiveClause, _SCOREVAR, Select, META_PROPERTIES
 
 
 class SPARQLGenerator(Generator):
@@ -15,8 +15,18 @@ class SPARQLGenerator(Generator):
     SPARQL query generator
     """
 
-    def generate_clause(self, clause: Clause, **kwargs) -> str:
 
+    def __init__(self):
+        super().__init__(language="SPARQL")
+        self.var_count = 0
+
+
+    def fresh_variable(self) -> Variable:
+        self.var_count += 1
+        return Variable(symbol=f"?{self.var_count}")
+
+    def generate_clause(self, clause: Clause, **kwargs) -> str:
+      try:
         if isinstance(clause, AtomicClause):
             """
             Generates the sparql triple clause
@@ -29,37 +39,37 @@ class SPARQLGenerator(Generator):
 
             clause_str = ""
 
-            match Comparison(clause.method):
+            match Comparison(clause.operator):
                 case Comparison.EXACT | Comparison.ANY:
                     clause_str += clause.n3()  # f"{self.subject} {self.property} {self.argument}"
                 case Comparison.REGEX:
-                    tmp_var = Variable()  # self._temp_var()
+                    tmp_var = self.fresh_variable()  # self._temp_var()
                     clause_str = f"{clause.subject} {clause.property.n3()} {tmp_var}\n"
-                    clause_str += f'\n\t\tFILTER  regex({tmp_var}, "{clause.argument}", "i")'
+                    clause_str += f'\n\t\tFILTER  regex({tmp_var}, "{clause.argument.constraint}", "i")'
                 case Comparison.KEYWORD:
                     clause_str += f'({clause.subject} ?{_SCOREVAR}) text:query "{clause.argument}"'
                 case Comparison.GREATER:
-                    var = clause.variable if clause.variable else Variable()
+                    var = clause.variable if clause.variable else self.fresh_variable()
                     clause_str += f"{clause.subject} {clause.property.n3()} {var}\n"
                     clause_str += f'\t\tFILTER ({var} > "{clause.argument}")'
                 case Comparison.LESSER:
-                    var = clause.variable if clause.variable else Variable()
+                    var = clause.variable if clause.variable else self.fresh_variable()
                     clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
                     clause_str += f'FILTER ({var} < "{clause.argument}")'
                 case Comparison.GREATER_EQUAL:
-                    var = clause.variable if clause.variable else Variable()
+                    var = clause.variable if clause.variable else self.fresh_variable()
                     clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
                     clause_str += f'FILTER ({var} >= "{clause.argument}")'
                 case Comparison.LESSER_EQUAL:
-                    var = clause.variable if clause.variable else Variable()
+                    var = clause.variable if clause.variable else self.fresh_variable()
                     clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
                     clause_str += f'FILTER ({var} <= "{clause.argument}")'
                 case Comparison.EQUAL:
-                    var = clause.variable if clause.variable else Variable()
+                    var = clause.variable if clause.variable else self.fresh_variable()
                     clause_str += f'{clause.subject} {clause.property.n3()} {var}\n'
                     clause_str += f'FILTER ({var} = "{clause.argument}")'
                 case Comparison.NOT_EXISTS:
-                    var = Variable()
+                    var = self.fresh_variable()
                     clause_str += f'FILTER NOT EXISTS {{ {clause.subject} {clause.property.n3()} {var} }}'
                 case Comparison.SIMILARITY:
                     pass
@@ -107,62 +117,66 @@ class SPARQLGenerator(Generator):
             return strio.getvalue()
         else:
             raise ValueError("Unsupported clause type")
+      except Exception as e:
+          logging.error(f"Error in generate_clause: {e}", exc_info=True)
 
-    def __init__(self):
-        super().__init__("SPARQL")
-
-    def generate_query(self, query: Select, **kwargs) -> str:
-        """
+    def generate_query(self, query: Query, **kwargs) -> str:
+       """
         Generates a SPARQL query from a SelectQuery
         :param query:
         :param kwargs:
         :return:
-        """
-        if kwargs.get('optimize', True):
-            query.sort_clauses()
+       """
 
-        if not isinstance(query, UnarySelectQuery):
-            raise TypeError("Can only generate_query from UnarySelectQuery")
+       try:
+            if kwargs.get('optimize', True):
+                query.sort_clauses()
 
-        strio = StringIO()
-        for (name, uri) in query.prefixes:
-            if uri.endswith("#") or uri.endswith("/"):
-                strio.write(f"PREFIX {name}: <{uri}>\n")
+            if not isinstance(query, Query):
+                raise TypeError("Can only generate_query from Query")
+
+            strio = StringIO()
+            for (name, uri) in query.prefixes.items():
+                if uri.endswith("#") or uri.endswith("/"):
+                    strio.write(f"PREFIX {name}: <{uri}>\n")
+                else:
+                    strio.write(f"PREFIX {name}: <{uri}#>\n")
+
+            strio.write("SELECT distinct ")  # {query.subject}")
+            for rv in query.project_vars():
+                strio.write(f" {rv} ")
+            if query.is_scored():
+                strio.write(f" ?{_SCOREVAR} ")
+            strio.write(" WHERE {\n")
+            if query.has_disjunctive_clauses():
+                strio.write("\t{\n")
+                for clause in query.atom_clauses():
+                    strio.write("\t\t" + self.generate_clause(clause))  # clause.to_sparql()
+                for clause in query.conjunctive_clauses():
+                    strio.write("\t\t" + self.generate_clause(clause))  # clause.to_sparql()
+
+                strio.write("\t}\n")
+
+                for clause in query.disjunctive_clauses():
+                    strio.write(self.generate_clause(clause))  # clause.to_sparql()
+
             else:
-                strio.write(f"PREFIX {name}: <{uri}#>\n")
+                for clause in query.components:
+                    strio.write("\t" + self.generate_clause(clause))  # clause.to_sparql()
 
-        strio.write("SELECT distinct ")  # {query.subject}")
-        for rv in query.project_vars():
-            strio.write(f" {rv} ")
-        if query.is_scored():
-            strio.write(f" ?{_SCOREVAR} ")
-        strio.write(" WHERE {\n")
-        if query.has_disjunctive_clauses():
-            strio.write("\t{\n")
-            for clause in query.atom_clauses():
-                strio.write("\t\t" + self.generate_clause(clause))  # clause.to_sparql()
-            for clause in query.conjunctive_clauses():
-                strio.write("\t\t" + self.generate_clause(clause))  # clause.to_sparql()
+            if query.min_score:
+                strio.write(f'\tFILTER (?{_SCOREVAR} >= {query.min_score})\n')
 
-            strio.write("\t}\n")
+            strio.write("}\n")
+            if query.is_scored():
+                strio.write(f"ORDER BY DESC(?{_SCOREVAR})\n")
+            if query.limit > 0:
+                strio.write(f"LIMIT {query.limit}\n")
 
-            for clause in query.disjunctive_clauses():
-                strio.write(self.generate_clause(clause))  # clause.to_sparql()
+            return strio.getvalue()
 
-        else:
-            for clause in query.components:
-                strio.write("\t" + self.generate_clause(clause))  # clause.to_sparql()
-
-        if query.min_score:
-            strio.write(f'\tFILTER (?{_SCOREVAR} >= {query.min_score})\n')
-
-        strio.write("}\n")
-        if query.is_scored():
-            strio.write(f"ORDER BY DESC(?{_SCOREVAR})\n")
-        if query.limit > 0:
-            strio.write(f"LIMIT {query.limit}\n")
-
-        return strio.getvalue()
+       except Exception as e:
+                logging.error(f"Error in generate_query: {e}", exc_info=True)
 
 
 

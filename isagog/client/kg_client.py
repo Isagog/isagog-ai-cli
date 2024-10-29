@@ -12,7 +12,7 @@ import httpx
 from dotenv import load_dotenv
 
 from isagog.model.kg_model import Individual, Assertion, Attribute, Concept, Relation, ID, KnowledgeObject
-from isagog.model.query_model import UnarySelectQuery, AtomicClause, Comparison, Value, CompositeClause
+from isagog.model.query_model import Query, AtomicClause, Comparison, Value, CompositeClause
 from isagog.model.ontology import Ontology
 
 load_dotenv()
@@ -132,7 +132,7 @@ class KnowledgeBase(object):
 
         self.logger.debug("Querying assertions for %s", subject)
 
-        query = UnarySelectQuery(subject=subject.id)
+        query = Query(subject=subject.id)
 
         for prop in properties:
             query.add_fetch_clause(predicate=str(prop.id))
@@ -203,7 +203,7 @@ class KnowledgeBase(object):
         assert (kinds or (constraints and len(constraints) > 0))
         self.logger.debug("Searching individuals")
         entities = []
-        query = UnarySelectQuery()
+        query = Query()
         if kinds:
             query.add_kinds(kinds)
         if len(constraints) == 1:
@@ -253,7 +253,7 @@ class KnowledgeBase(object):
             return []
 
     def query_individuals(self,
-                          query: UnarySelectQuery,
+                          query: Query,
                           kind: Type[E] = Individual,
                           **kwargs
                           ) -> list[E]:

@@ -6,15 +6,17 @@
 from __future__ import annotations
 
 import re
-from abc import abstractmethod
+import string
+from abc import abstractmethod, ABC
 from enum import Enum
-from typing import Protocol, List, Union, Optional, Any, Dict
+import random
+from typing import  List, Union, Optional, Any, Dict
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, model_validator, field_validator
 from rdflib import RDF, RDFS, OWL, URIRef
 
-from isagog.model.kg_model import N3String
+from isagog.model.kg_model import N3String, N3Serializable
 
 DEFAULT_PREFIXES = [
     ("rdf", "http://www.w3.org/2000/01/rdf-schema"),
@@ -22,9 +24,10 @@ DEFAULT_PREFIXES = [
     ("text", "http://jena.apache.org/text")
 ]
 
-_SUBJVAR = 'i'
-_KINDVAR = 'k'
-_SCOREVAR = 'score'
+_SUBJVAR:str = '?i'
+_KINDVAR:str = '?k'
+_SCOREVAR:str = '?score'
+
 
 class META_PROPERTIES(str, Enum):
     IN = "IN"
@@ -50,7 +53,7 @@ def is_variable(string: str) -> bool:
     return string.startswith('?')
 
 
-class Identifier(BaseModel):
+class Identifier(BaseModel, N3Serializable):
     id: N3String
 
     def __str__(self) -> str:
@@ -70,12 +73,12 @@ class Identifier(BaseModel):
         return Identifier(id=N3String(value))
 
 
-class Variable(BaseModel):
-    variable: str
+class Variable(BaseModel, N3Serializable):
+    symbol: str = Field(default_factory=lambda: ''.join(random.choices(string.ascii_letters, k=4)))
     constraint: Optional[Value] = None
 
     @classmethod
-    @field_validator('variable', mode='before')
+    @field_validator('symbol', mode='before')
     def validate_variable(cls, symbol: Any) -> str:
         if not isinstance(symbol, str):
             raise ValueError(f"Expected string, got {type(symbol)}")
@@ -83,36 +86,34 @@ class Variable(BaseModel):
             symbol = f"?{symbol}"
         pattern = r'^[a-zA-Z0-9_?]+$'
         if not re.match(pattern, symbol):
-            raise ValueError(f"Invalid variable name {symbol}")
+            raise ValueError(f"Invalid symbol name {symbol}")
         return symbol
 
     def __str__(self) -> str:
-        return self.variable
+        return self.symbol
 
     model_config = {
         "frozen": True
     }
 
-    def model_dump(self, **kwargs) -> dict[str, Any]:
-        return {
-            "variable": self.variable
-        }
+    def n3(self) -> str:
+        return self.symbol
 
     @classmethod
     def model_construct(cls, _fields_set: set[str] | None = None, **values: Any) -> Variable:
-        return cls(variable=values.get("variable"))
+        return cls(symbol=values.get("symbol"))
 
     @staticmethod
     def new(value: str, constr: Union[str, int, float] = None) -> Variable:
         if constr:
-            return Variable(variable=value, constraint=Value.new(constr))
-        return Variable(variable=value)
+            return Variable(symbol=value, constraint=Value.new(constr))
+        return Variable(symbol=value)
 
 
 
 
 
-class Value(BaseModel):
+class Value(BaseModel, N3Serializable):
     value: Union[str, int, float]
 
     @classmethod
@@ -131,6 +132,11 @@ class Value(BaseModel):
     model_config = {
         "frozen": True
     }
+
+    def n3(self) -> str:
+        if isinstance(self.value, str):
+            return f'"{self.value}"'
+        return str(self.value)
 
 
     @staticmethod
@@ -164,6 +170,9 @@ class Clause(BaseModel):
     def _argument(self) -> Optional[Argument]:
         pass
 
+    def is_defined(self) -> bool:
+        return all([self._subject(), self._property(), self._argument()])
+
 
 class AtomicClause(Clause):
     property: Identifier = Field(...)
@@ -184,6 +193,11 @@ class AtomicClause(Clause):
 
     def _argument(self) -> Optional[Argument]:
         return self.argument
+
+    def arg_variable(self) -> Optional[Variable]:
+        if isinstance(self.argument, Variable):
+            return self.argument
+        return None
 
 class CompositeClause(Clause):
     clauses: List[AnyClause] = Field(default_factory=list)
@@ -242,9 +256,6 @@ class CompositeClause(Clause):
 class ConjunctiveClause(CompositeClause):
     op: str = "AND"
 
-    def n3(self) -> str:
-        return f"{' . '.join([c.n3() for c in self.clauses])}"
-
 
 
 class DisjunctiveClause(CompositeClause):
@@ -283,12 +294,6 @@ class Select(ConjunctiveClause):
         return new_atom
 
 
-    def last(self) -> Optional[Clause]:
-        if self.clauses:
-            return self.clauses[-1]
-        else:
-            return None
-
 
     def where(self,
               property: Property,
@@ -303,10 +308,7 @@ class Select(ConjunctiveClause):
                                   argument=argument,
                                   optional=optional,
                                   project=project)
-        if not self.clauses:
-            self.clauses.append(new_clause)
-        else:
-            raise Exception("Illegal call to where")
+        self.clauses.append(new_clause)
         return self
 
     def and_where(self,
@@ -326,7 +328,12 @@ class Select(ConjunctiveClause):
         if not self.clauses:
             raise Exception("Illegal call to and_where")
         self.clauses.append(new_atom)
+        return self
 
+    def and_select(self, select: Select) -> 'Select':
+        if not self.clauses:
+            raise Exception("Illegal call to and_select")
+        self.clauses.append(select)
         return self
 
     def or_where(self,
@@ -348,7 +355,17 @@ class Select(ConjunctiveClause):
             self.clauses = [disj]
         return self
 
-
+    def or_select(self, select: Select) -> 'Select':
+        if not self.clauses:
+            raise Exception("Illegal call to or_select")
+        if len(self.clauses) == 1:
+            last = self.clauses.pop()
+            self.clauses.append(DisjunctiveClause(clauses=[last, select]))
+        else:
+            conj = ConjunctiveClause(clauses=self.clauses)
+            disj = DisjunctiveClause(clauses=[conj, select])
+            self.clauses = [disj]
+        return self
 
     def project_clauses(self) -> List[AtomicClause]:
         def _project_clauses(c: Clause, _clauses: List[AtomicClause]) -> None:
@@ -367,7 +384,7 @@ class Select(ConjunctiveClause):
         def _project_vars(c: Clause, _vars: List[str]) -> None:
             if isinstance(c, AtomicClause) and c.project:
                 if c.arg_variable():
-                    _vars.append(c.argument.variable)
+                    _vars.append(str(c.argument.symbol))
             elif isinstance(c, CompositeClause):
                 for sc in c.clauses:
                     _project_vars(sc, _vars)
@@ -385,9 +402,8 @@ class Select(ConjunctiveClause):
         return self
 
 
-class UnarySelectQuery(BaseModel):
+class Query(Select):
         prefixes: Optional[Dict] = None
-        query: Select = Select()
         graph: str = "defaultGraph"
         subject: Subject = Variable.new(_SUBJVAR)
         kind: Optional[Union[Identifier, List[Identifier]]] = None
@@ -396,9 +412,9 @@ class UnarySelectQuery(BaseModel):
         min_score: Optional[float] = None
 
         @model_validator(mode='after')
-        def setup(self) -> 'UnarySelectQuery':
+        def setup(self) -> 'Query':
 
-            self.query.and_where(
+            self.where(
                 subject=self.subject,
                 property=RDF_TYPE,
                 operation=Comparison.EXACT,
@@ -406,21 +422,21 @@ class UnarySelectQuery(BaseModel):
             )
             if self.kind:
                 if isinstance(self.kind, Identifier):
-                    self.query.and_where(
+                    self.and_where(
                         subject=self.subject,
                         property=RDF_TYPE,
                         operation=Comparison.EXACT,
                         argument=self.kind
                     )
                 elif isinstance(self.kind, list):
-                    self.query.and_where(
+                    self.and_where(
                         subject=self.subject,
                         property=RDF_TYPE,
                         operation=Comparison.EXACT,
                         argument=self.kind.pop(0)
                     )
                     for kind in self.kind:
-                        self.query.or_where(
+                        self.or_where(
                             subject=self.subject,
                             property=RDF_TYPE,
                             argument=kind,
@@ -432,15 +448,46 @@ class UnarySelectQuery(BaseModel):
 
             return self
 
+        def is_scored(self) -> bool:
+            return self.min_score is not None
 
-class Generator(Protocol):
+        def has_disjunctive_clauses(self) -> bool:
+            return any(isinstance(clause, DisjunctiveClause) for clause in self.clauses)
+
+        def has_conjunctive_clauses(self) -> bool:
+            return any(isinstance(clause, ConjunctiveClause) for clause in self.clauses)
+
+        def atom_clauses(self) -> List[AtomicClause]:
+            def _atom_clauses(c: Clause, _clauses: List[AtomicClause]) -> None:
+                if isinstance(c, AtomicClause):
+                    _clauses.append(c)
+                elif isinstance(c, CompositeClause):
+                    for sc in c.clauses:
+                        _atom_clauses(sc, _clauses)
+
+            atom_clauses = []
+            for c in self.clauses:
+                _atom_clauses(c, atom_clauses)
+            return atom_clauses
+
+        def conjunctive_clauses(self) -> List[ConjunctiveClause]:
+            return [clause for clause in self.clauses if isinstance(clause, ConjunctiveClause)]
+
+        def disjunctive_clauses(self) -> List[DisjunctiveClause]:
+            return [clause for clause in self.clauses if isinstance(clause, DisjunctiveClause)]
+
+
+
+class Generator(ABC):
     def __init__(self, language: str, version: str = None):
         self.language = language
         self.version = version
 
-    def generate_query(self, query: Select, **kwargs) -> str:
+    @abstractmethod
+    def generate_query(self, query: Query, **kwargs) -> str:
         pass
 
+    @abstractmethod
     def generate_clause(self, clause: Clause, **kwargs) -> str:
         pass
 
