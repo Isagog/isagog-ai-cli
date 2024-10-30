@@ -6,7 +6,7 @@ import logging
 from io import StringIO
 
 from isagog.model.query_model import Generator, Clause
-from isagog.model.query_model import Query, AtomicClause, Comparison, Variable, \
+from isagog.model.query_model import UnaryQuery, AtomicClause, Comparison, Variable, \
     ConjunctiveClause, DisjunctiveClause, _SCOREVAR, Select, META_PROPERTIES
 
 
@@ -120,7 +120,7 @@ class SPARQLGenerator(Generator):
       except Exception as e:
           logging.error(f"Error in generate_clause: {e}", exc_info=True)
 
-    def generate_query(self, query: Query, **kwargs) -> str:
+    def generate_query(self, query: UnaryQuery, **kwargs) -> str:
        """
         Generates a SPARQL query from a SelectQuery
         :param query:
@@ -132,7 +132,7 @@ class SPARQLGenerator(Generator):
             if kwargs.get('optimize', True):
                 query.sort_clauses()
 
-            if not isinstance(query, Query):
+            if not isinstance(query, UnaryQuery):
                 raise TypeError("Can only generate_query from Query")
 
             strio = StringIO()
@@ -146,28 +146,14 @@ class SPARQLGenerator(Generator):
             for rv in query.project_vars():
                 strio.write(f" {rv} ")
             if query.is_scored():
-                strio.write(f" ?{_SCOREVAR} ")
-            strio.write(" WHERE {\n")
-            if query.has_disjunctive_clauses():
-                strio.write("\t{\n")
-                for clause in query.atom_clauses():
-                    strio.write("\t\t" + self.generate_clause(clause))  # clause.to_sparql()
-                for clause in query.conjunctive_clauses():
-                    strio.write("\t\t" + self.generate_clause(clause))  # clause.to_sparql()
-
-                strio.write("\t}\n")
-
-                for clause in query.disjunctive_clauses():
-                    strio.write(self.generate_clause(clause))  # clause.to_sparql()
-
-            else:
-                for clause in query.components:
-                    strio.write("\t" + self.generate_clause(clause))  # clause.to_sparql()
-
+                strio.write(f" {_SCOREVAR} ")
+            strio.write(" WHERE \n")
+            for clause in query.clauses:
+                strio.write(self.generate_clause(clause))
             if query.min_score:
                 strio.write(f'\tFILTER (?{_SCOREVAR} >= {query.min_score})\n')
 
-            strio.write("}\n")
+            #strio.write("}\n")
             if query.is_scored():
                 strio.write(f"ORDER BY DESC(?{_SCOREVAR})\n")
             if query.limit > 0:

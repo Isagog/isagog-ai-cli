@@ -5,15 +5,14 @@ Interface to the Isagog Knoledge Graph service
 import logging
 import os
 import time
-from typing import Type, TypeVar
+from typing import Type, TypeVar, Optional, List
 
 # import requests
 import httpx
 from dotenv import load_dotenv
 
-from isagog.model.kg_model import Individual, Assertion, Attribute, Concept, Relation, ID, KnowledgeObject
-from isagog.model.query_model import Query, AtomicClause, Comparison, Value, CompositeClause
-from isagog.model.ontology import Ontology
+from isagog.model.kg_model import Individual, Assertion, Attribute, Relation, ID, KnowledgeObject
+from isagog.model.query_model import UnaryQuery, Identifier, Variable
 
 load_dotenv()
 
@@ -33,48 +32,43 @@ class KnowledgeBase(object):
 
     def __init__(self,
                  route: str,
-                 ontology: Ontology = None,
                  dataset: str = None,
-                 version: str = None,
                  logger=None):
         """
 
         :param route: the service's endpoint route
-        :param ontology: the kb ontology
         :param dataset: the dataset name; if None, uses the service's default
-        :param version: the service's version identifier
+
         """
         assert route
         self.route = route
         self.dataset = dataset
-        self.ontology = ontology
-        self.version = version if version else "latest"
         self.logger = logger if logger else logging.getLogger()
         self.logger.info("Isagog KG client (%s) initialized on route %s", hex(id(self)), route)
 
-    def get_entity(self,
-                   _id: ID,
+    def get_knowledge(self,
+                   id: ID,
                    expand: bool = True,
-                   entity_type: Type[E] = KnowledgeObject,
+                   type: Type[E] = KnowledgeObject,
                    **kwargs
                    ) -> E | None:
         """
-        Gets the entity by its identifier
-        :param _id: the entity identifier
-        :param expand: whether to return entity attributes
+        Gets the knowledge object by its identifier
+        :param id: the entity identifier
+        :param expand: whether to return attributes
         :param entity_type: the entity type (default: Entity)
         """
 
-        assert _id
+        assert id
 
-        self.logger.debug("Fetching %s", _id)
+        self.logger.debug("Fetching %s", id)
 
-        if not issubclass(entity_type, KnowledgeObject):
-            raise ValueError(f"{entity_type} not a KnowledgeObject")
+        if not issubclass(type, KnowledgeObject):
+            raise ValueError(f"{type} not a KnowledgeObject")
 
         expand = "true" if expand else "false"
 
-        params = f"id={_id}&expand={expand}"
+        params = f"id={id}&expand={expand}"
 
         headers = {"Accept": "application/json"}
 
@@ -90,8 +84,8 @@ class KnowledgeBase(object):
                 headers=headers,
             )
             res.raise_for_status()
-            self.logger.debug("Fetched %s", _id)
-            return entity_type(id=_id, **res.json())
+            self.logger.debug("Fetched %s", id)
+            return type(id=id, **res.json())
         except httpx.ConnectError:
             self.logger.error("Failed to connect to the host %s.", self.route)
             return None
@@ -132,17 +126,18 @@ class KnowledgeBase(object):
 
         self.logger.debug("Querying assertions for %s", subject)
 
-        query = Query(subject=subject.id)
+        query = UnaryQuery(subject=subject.id)
 
         for prop in properties:
-            query.add_fetch_clause(predicate=str(prop.id))
+            query.and_where(property=Identifier.new(prop.id),
+                            argument=Variable.new(f"?{prop.id}"))  #add_fetch_clause(predicate=str(prop.id))
 
         headers = {"Accept": "application/json"}
 
         if AUTH_TOKEN_VALUE:
             headers[AUTH_TOKEN_KEY] = AUTH_TOKEN_VALUE
 
-        query_dict = query.to_dict(version=self.version)
+        query_dict = query.to_dict()
 
         timeout = kwargs.get('timeout', KG_DEFAULT_TIMEOUT)
 
@@ -160,12 +155,15 @@ class KnowledgeBase(object):
                 self.logger.warning("Void attribute query")
                 return []
             else:
-                res_attrib_list = res_list[0].get('attributes', OSError("malformed response"))
-
+                res_attrib_list = res_list[0].get('attributes', None)
+                if res_attrib_list is None:
+                    raise Exception("Malformed response from attribute query")
                 def __get_values(_prop: str) -> str:
                     try:
                         record = next(item for item in res_attrib_list if item['id'] == _prop)
-                        return record.get('values', OSError("malformed response"))
+                        values = record.get('values', None)
+                        if values is None:
+                            raise Exception("Malformed response from attribute query")
                     except StopIteration:
                         # raise OSError("incomplete response: %s not found", _prop)
                         return None
@@ -189,84 +187,20 @@ class KnowledgeBase(object):
             self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
             return []
 
-    def search_individuals(self,
-                           kinds: list[Concept] = None,
-                           constraints: dict[Attribute, Value] = None,
-                           **kwargs
-                           ) -> list[Individual]:
-        """
-        Retrieves individuals by string search
-        :param kinds: the kinds to search for
-        :param constraints: the search constraints
-        :return: a list of matching individuals
-        """
-        assert (kinds or (constraints and len(constraints) > 0))
-        self.logger.debug("Searching individuals")
-        entities = []
-        query = Query()
-        if kinds:
-            query.add_kinds(kinds)
-        if len(constraints) == 1:
-            attribute, value = next(iter(constraints.items()))
-            search_clause = AtomicClause(property=attribute, argument=value, method=Comparison.REGEX)
-        else:
-            search_clause = CompositeClause(op="OR")
-            for attribute, value in constraints.items():
-                search_clause.add_atom(property=attribute, argument=value, method=Comparison.REGEX)
-
-        query.add(search_clause)
-
-        headers = {"Accept": "application/json"}
-        if 'auth_token' in kwargs:
-            headers[AUTH_TOKEN_KEY] = kwargs.get('auth_token')
-
-        timeout = kwargs.get('timeout', KG_DEFAULT_TIMEOUT)
-
-        try:
-            res = httpx.post(
-                url=self.route,
-                json=query.to_dict(version=self.version),
-                headers=headers,
-                timeout=timeout
-            )
-            res.raise_for_status()
-            if res.status_code == 200:
-                entities.extend([Individual(id=r.get('id'), **r) for r in res.json()])
-            else:
-                self.logger.error("Search individuals failed: code %d, reason %s", res.status_code, res.text)
-            return entities
-        except httpx.ConnectError:
-            self.logger.error("Failed to connect to the host %s.", self.route)
-            return []
-        except httpx.RequestError as exc:
-            self.logger.error(f"An error occurred while requesting {exc.request.url!r}.")
-            return []
-        except httpx.TimeoutException:
-            self.logger.error("The request timed out from %s.", self.route)
-            return []
-        except httpx.HTTPStatusError as exc:
-            self.logger.error(
-                f"HTTP error from occurred from {self.route}: {exc.response.status_code} - {exc.response.text}")
-            return []
-        except Exception as exc:
-            self.logger.error(f"An unexpected error occurred on {self.route}: {exc}")
-            return []
 
     def query_individuals(self,
-                          query: Query,
-                          kind: Type[E] = Individual,
+                          query: UnaryQuery,
                           **kwargs
-                          ) -> list[E]:
+                          ) -> Optional[List[Individual]]:
         """
 
 
         :param query: the query
-        :param kind: the kind of individuals to return
         :return: a list of individuals of the specified kind
         """
         start_time = time.time()
 
-        req = query.to_dict(version=self.version)
+        req = query.model_dump()
 
         if self.dataset and (self.version == "latest" or self.version > "v1.0.0"):
             req['dataset'] = self.dataset
@@ -287,7 +221,7 @@ class KnowledgeBase(object):
             )
             res.raise_for_status()
             self.logger.debug("Query individuals done in %d seconds", time.time() - start_time)
-            return [kind(r.get('id'), **r) for r in res.json()]
+            return [Individual(id=r.get('id'), **r) for r in res.json()]
 
         except httpx.ConnectError:
             self.logger.error("Failed to connect to the host %s.", self.route)

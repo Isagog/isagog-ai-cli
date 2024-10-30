@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "isagog-ai"
+name = "isagog-kg"
 version = "1.1.0"
-description = "client for isagog ai services"
+description = "client for isagog kg services"
 authors = ["Guido Vetere <g.vetere@isagog.com>"]
 readme = "README.md"
 packages = [{include = "isagog"},
@@ -20,6 +20,17 @@ pytest = "^8.3.3"
 python-dotenv = "^1.0.0"
 httpx = "^0.27.0"
 pydantic = "^2.8.2"
+
+[tool.poetry.dev-dependencies]
+pytest = "^8.2.1"
+pytest-cov = "^5.0.0"
+pre-commit = "^3.0.1"
+flake8 = "^7.0.0"
+mypy = "^1.13.0"
+isort = "^5.11.4"
+black = "^24.4.2"
+pylint = "^3.2.5"
+pyyaml = "^6.0"
 
 
 [build-system]

@@ -232,6 +232,7 @@ class Relation(Property):
     """
     Represents a property that has a range on knowledge objects.
     """
+
     range: Optional[ID] = Field(
         None,
         description="The range of the relation, represented as ID. Specifies the type of concepts this relation can point to."

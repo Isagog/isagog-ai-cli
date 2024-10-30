@@ -62,6 +62,7 @@ class Identifier(BaseModel, N3Serializable):
     def n3(self):
         return self.id.n3()
 
+    @classmethod
     @field_validator('id')
     def validate_value(cls, v: str) -> str:
         if not v:
@@ -108,9 +109,6 @@ class Variable(BaseModel, N3Serializable):
         if constr:
             return Variable(symbol=value, constraint=Value.new(constr))
         return Variable(symbol=value)
-
-
-
 
 
 class Value(BaseModel, N3Serializable):
@@ -197,6 +195,11 @@ class AtomicClause(Clause):
     def arg_variable(self) -> Optional[Variable]:
         if isinstance(self.argument, Variable):
             return self.argument
+        return None
+
+    def subj_variable(self) -> Optional[Variable]:
+        if isinstance(self.subject, Variable):
+            return self.subject
         return None
 
 class CompositeClause(Clause):
@@ -367,24 +370,14 @@ class Select(ConjunctiveClause):
             self.clauses = [disj]
         return self
 
-    def project_clauses(self) -> List[AtomicClause]:
-        def _project_clauses(c: Clause, _clauses: List[AtomicClause]) -> None:
-            if isinstance(c, AtomicClause) and c.project:
-                _clauses.append(c)
-            elif isinstance(c, CompositeClause):
-                for sc in c.clauses:
-                    _project_clauses(sc, _clauses)
-
-        project_clauses = []
-        for c in self.clauses:  # Usiamo clauses invece di select.components
-            _project_clauses(c, project_clauses)
-        return project_clauses
 
     def project_vars(self) -> set[str]:
         def _project_vars(c: Clause, _vars: List[str]) -> None:
             if isinstance(c, AtomicClause) and c.project:
                 if c.arg_variable():
                     _vars.append(str(c.argument.symbol))
+                if c.subj_variable():
+                    _vars.append(str(c.subject.symbol))
             elif isinstance(c, CompositeClause):
                 for sc in c.clauses:
                     _project_vars(sc, _vars)
@@ -402,7 +395,10 @@ class Select(ConjunctiveClause):
         return self
 
 
-class Query(Select):
+class UnaryQuery(Select):
+        """
+        Unary query
+        """
         prefixes: Optional[Dict] = None
         graph: str = "defaultGraph"
         subject: Subject = Variable.new(_SUBJVAR)
@@ -412,13 +408,14 @@ class Query(Select):
         min_score: Optional[float] = None
 
         @model_validator(mode='after')
-        def setup(self) -> 'Query':
+        def setup(self) -> 'UnaryQuery':
 
             self.where(
                 subject=self.subject,
                 property=RDF_TYPE,
                 operation=Comparison.EXACT,
-                argument=OWL_INDIVIDUAL
+                argument=OWL_INDIVIDUAL,
+                project=True
             )
             if self.kind:
                 if isinstance(self.kind, Identifier):
@@ -477,6 +474,10 @@ class Query(Select):
             return [clause for clause in self.clauses if isinstance(clause, DisjunctiveClause)]
 
 
+        def to_dict(self, **kwargs) -> dict:
+            return self.model_dump()
+
+
 
 class Generator(ABC):
     def __init__(self, language: str, version: str = None):
@@ -484,7 +485,7 @@ class Generator(ABC):
         self.version = version
 
     @abstractmethod
-    def generate_query(self, query: Query, **kwargs) -> str:
+    def generate_query(self, query: UnaryQuery, **kwargs) -> str:
         pass
 
     @abstractmethod
