@@ -10,7 +10,7 @@ import string
 from abc import abstractmethod, ABC
 from enum import Enum
 import random
-from typing import  List, Union, Optional, Any, Dict
+from typing import List, Union, Optional, Any, Dict, Tuple
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, model_validator, field_validator
@@ -24,9 +24,9 @@ DEFAULT_PREFIXES = [
     ("text", "http://jena.apache.org/text")
 ]
 
-_SUBJVAR:str = '?i'
-_KINDVAR:str = '?k'
-_SCOREVAR:str = '?score'
+SUBJECT_VARIABLE:str = '?i'
+KIND_VARIABLE:str = '?k'
+SCORE_VARIABLE:str = '?score'
 
 
 class META_PROPERTIES(str, Enum):
@@ -56,6 +56,11 @@ def is_variable(string: str) -> bool:
 class Identifier(BaseModel, N3Serializable):
     id: N3String
 
+    def __init__(self, id: Union[str, N3String, URIRef], **kwargs):
+        if isinstance(id, (str, URIRef)):
+            id = N3String(id)
+        super().__init__(id=id, **kwargs)
+
     def __str__(self) -> str:
         return self.id
 
@@ -70,13 +75,18 @@ class Identifier(BaseModel, N3Serializable):
         return v
 
     @staticmethod
-    def new(value: Union[str, URIRef]) -> Identifier:
-        return Identifier(id=N3String(value))
+    def new(id: Union[str, URIRef]) -> Identifier:
+        return Identifier(id=N3String(id))
 
 
 class Variable(BaseModel, N3Serializable):
-    symbol: str = Field(default_factory=lambda: ''.join(random.choices(string.ascii_letters, k=4)))
-    constraint: Optional[Value] = None
+    symbol: str = Field(default_factory=lambda: ''.join(random.choices(string.ascii_letters, k=8)))
+    constraint: Optional[Constraint] = None
+
+    def __init__(self, symbol: str = None, constraint: Constraint = None, **kwargs):
+        if symbol is None:
+            symbol = ''.join(random.choices(string.ascii_letters, k=8))
+        super().__init__(symbol=symbol, constraint=constraint, **kwargs)
 
     @classmethod
     @field_validator('symbol', mode='before')
@@ -93,9 +103,6 @@ class Variable(BaseModel, N3Serializable):
     def __str__(self) -> str:
         return self.symbol
 
-    model_config = {
-        "frozen": True
-    }
 
     def n3(self) -> str:
         return self.symbol
@@ -105,14 +112,17 @@ class Variable(BaseModel, N3Serializable):
         return cls(symbol=values.get("symbol"))
 
     @staticmethod
-    def new(value: str, constr: Union[str, int, float] = None) -> Variable:
-        if constr:
-            return Variable(symbol=value, constraint=Value.new(constr))
-        return Variable(symbol=value)
+    def new(symbol: str, constraint: Union[str, int, float] = None) -> Variable:
+        if constraint:
+            return Variable(symbol=symbol, constraint=Value.new(constraint))
+        return Variable(symbol=symbol)
 
 
 class Value(BaseModel, N3Serializable):
     value: Union[str, int, float]
+
+    def __init__(self, value: Union[str, int, float], **kwargs):
+        super().__init__(value=value, **kwargs)
 
     @classmethod
     @field_validator('value', mode='before')
@@ -127,10 +137,6 @@ class Value(BaseModel, N3Serializable):
     def __str__(self) -> str:
         return str(self.value)
 
-    model_config = {
-        "frozen": True
-    }
-
     def n3(self) -> str:
         if isinstance(self.value, str):
             return f'"{self.value}"'
@@ -142,13 +148,14 @@ class Value(BaseModel, N3Serializable):
         return Value(value=value)
 
 
+
 # Predefined identifiers
-RDF_TYPE = Identifier.new(RDF.type)
-RDFS_LABEL = Identifier.new(RDFS.label)
-OWL_CLASS = Identifier.new(OWL.Class)
-OWL_INDIVIDUAL = Identifier.new(OWL.NamedIndividual)
+RDF_TYPE = Identifier(RDF.type)
+RDFS_LABEL = Identifier(RDFS.label)
+OWL_CLASS = Identifier(OWL.Class)
+OWL_INDIVIDUAL = Identifier(OWL.NamedIndividual)
 
-
+Constraint = Union[Value, Tuple[Identifier, Value]]
 Subject = Union[Identifier, Variable]
 Property = Identifier
 Argument = Union[Value,Identifier, Variable]
@@ -174,8 +181,8 @@ class Clause(BaseModel):
 
 class AtomicClause(Clause):
     property: Identifier = Field(...)
-    subject: Subject = Field(default_factory=lambda: Variable.new(_SUBJVAR))
-    argument: Argument = Field(default_factory=lambda: Value.new(""))
+    subject: Subject = Field(default_factory=lambda: Variable(SUBJECT_VARIABLE))
+    argument: Argument = Field(default_factory=lambda: Value(""))
     operator: Comparison = Field(default=Comparison.ANY)
     project: bool = True
     optional: bool = False
@@ -201,6 +208,9 @@ class AtomicClause(Clause):
         if isinstance(self.subject, Variable):
             return self.subject
         return None
+
+    def get_argument_class(self) -> str:
+        return type(self.argument).__name__
 
 class CompositeClause(Clause):
     clauses: List[AnyClause] = Field(default_factory=list)
@@ -301,7 +311,7 @@ class Select(ConjunctiveClause):
     def where(self,
               property: Property,
               argument: Argument,
-              subject: Subject = Variable.new(_SUBJVAR),
+              subject: Subject = Variable.new(SUBJECT_VARIABLE),
               operation: Comparison = Comparison.ANY,
               optional: bool = False,
               project: bool = True) -> 'Select':
@@ -320,7 +330,7 @@ class Select(ConjunctiveClause):
                   operation: Comparison = Comparison.ANY,
                   subject: Subject = None,
                   optional: bool = False,
-                  project: bool = False) -> 'Select':
+                  project: bool = True) -> 'Select':
         new_atom = self._new_atom(
             operation=operation,
             argument=argument,
@@ -348,14 +358,18 @@ class Select(ConjunctiveClause):
                  project: bool = False) -> 'Select':
         if not self.clauses:
             raise Exception("Illegal call to or_where")
-        new_atom = self._new_atom(operation, argument, property, subject, optional, project)
+        new_atom = self._new_atom(operation=operation,
+                                  argument=argument,
+                                  property=property,
+                                  subject=subject,
+                                  optional=optional,
+                                  project=project)
         if len(self.clauses) == 1:
             last = self.clauses.pop()
             self.clauses.append(DisjunctiveClause(clauses=[last, new_atom]))
         else:
             conj = ConjunctiveClause(clauses=self.clauses)
-            disj = DisjunctiveClause(clauses=[conj, new_atom])
-            self.clauses = [disj]
+            self.clauses = [DisjunctiveClause(clauses=[conj, new_atom])]
         return self
 
     def or_select(self, select: Select) -> 'Select':
@@ -401,7 +415,7 @@ class UnaryQuery(Select):
         """
         prefixes: Optional[Dict] = None
         graph: str = "defaultGraph"
-        subject: Subject = Variable.new(_SUBJVAR)
+        subject: Subject = Variable.new(SUBJECT_VARIABLE)
         kind: Optional[Union[Identifier, List[Identifier]]] = None
         limit: int = -1
         lang: str = "en"
@@ -410,29 +424,29 @@ class UnaryQuery(Select):
         @model_validator(mode='after')
         def setup(self) -> 'UnaryQuery':
 
-            self.where(
-                subject=self.subject,
-                property=RDF_TYPE,
-                operation=Comparison.EXACT,
-                argument=OWL_INDIVIDUAL,
-                project=True
-            )
+            # self.where(
+            #     subject=self.subject,
+            #     property=RDF_TYPE,
+            #     operation=Comparison.EXACT,
+            #     argument=OWL_INDIVIDUAL,
+            #     project=True
+            # )
             if self.kind:
                 if isinstance(self.kind, Identifier):
-                    self.and_where(
+                    self.where(
                         subject=self.subject,
                         property=RDF_TYPE,
                         operation=Comparison.EXACT,
                         argument=self.kind
                     )
                 elif isinstance(self.kind, list):
-                    self.and_where(
+                    self.where(
                         subject=self.subject,
                         property=RDF_TYPE,
                         operation=Comparison.EXACT,
                         argument=self.kind.pop(0)
                     )
-                    for kind in self.kind:
+                    for kind in self.kind[1:]:
                         self.or_where(
                             subject=self.subject,
                             property=RDF_TYPE,

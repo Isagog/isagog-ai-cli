@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "isagog-kg"
 version = "1.1.0"
-description = "client for isagog kg services"
+description = "client for isagog kg service"
 authors = ["Guido Vetere <g.vetere@isagog.com>"]
 readme = "README.md"
 packages = [{include = "isagog"},
