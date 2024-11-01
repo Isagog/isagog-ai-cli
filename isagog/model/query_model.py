@@ -424,13 +424,6 @@ class UnaryQuery(Select):
         @model_validator(mode='after')
         def setup(self) -> 'UnaryQuery':
 
-            # self.where(
-            #     subject=self.subject,
-            #     property=RDF_TYPE,
-            #     operation=Comparison.EXACT,
-            #     argument=OWL_INDIVIDUAL,
-            #     project=True
-            # )
             if self.kind:
                 if isinstance(self.kind, Identifier):
                     self.where(
@@ -486,6 +479,9 @@ class UnaryQuery(Select):
 
         def disjunctive_clauses(self) -> List[DisjunctiveClause]:
             return [clause for clause in self.clauses if isinstance(clause, DisjunctiveClause)]
+
+        def project_clauses(self) -> List[AtomicClause]:
+            return [clause for clause in self.atom_clauses() if clause.project]
 
 
         def to_dict(self, **kwargs) -> dict:
