@@ -11,8 +11,8 @@ from typing import Type, TypeVar, Optional, List
 import httpx
 from dotenv import load_dotenv
 
-from isagog.model.kg_model import Individual, Assertion, Attribute, Relation, ID, KnowledgeObject
-from isagog.model.query_model import UnaryQuery, Identifier, Variable
+from isagog.model.kg_model import Individual, ID, KnowledgeObject
+from isagog.model.query_model import UnaryQuery
 
 load_dotenv()
 
@@ -107,20 +107,17 @@ class KnowledgeBase(object):
 
     def query_individuals(self,
                           query: UnaryQuery,
+                          type: Type[E] = Individual,
                           **kwargs
-                          ) -> Optional[List[Individual]]:
+                          ) -> Optional[List[E]]:
         """
 
 
+        :param type:
         :param query: the query
         :return: a list of individuals of the specified kind
         """
         start_time = time.time()
-
-        req = query.model_dump()
-
-        if self.dataset and (self.version == "latest" or self.version > "v1.0.0"):
-            req['dataset'] = self.dataset
 
         headers = {"Accept": "application/json"}
 
@@ -132,13 +129,13 @@ class KnowledgeBase(object):
         try:
             res = httpx.post(
                 url=self.route,
-                json=req,
+                json=query.model_dump(),
                 headers=headers,
                 timeout=timeout
             )
             res.raise_for_status()
             self.logger.debug("Query individuals done in %d seconds", time.time() - start_time)
-            return [Individual(id=r.get('id'), **r) for r in res.json()]
+            return [type(id=r.get('id'), **r) for r in res.json()]
 
         except httpx.ConnectError:
             self.logger.error("Failed to connect to the host %s.", self.route)

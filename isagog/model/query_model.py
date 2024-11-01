@@ -54,12 +54,11 @@ def is_variable(string: str) -> bool:
 
 
 class Identifier(BaseModel, N3Serializable):
-    id: N3String
+    id: Union[N3String, URIRef]
 
-    def __init__(self, id: Union[str, N3String, URIRef], **kwargs):
-        if isinstance(id, (str, URIRef)):
-            id = N3String(id)
-        super().__init__(id=id, **kwargs)
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
 
     def __str__(self) -> str:
         return self.id
@@ -83,10 +82,10 @@ class Variable(BaseModel, N3Serializable):
     symbol: str = Field(default_factory=lambda: ''.join(random.choices(string.ascii_letters, k=8)))
     constraint: Optional[Constraint] = None
 
-    def __init__(self, symbol: str = None, constraint: Constraint = None, **kwargs):
-        if symbol is None:
-            symbol = ''.join(random.choices(string.ascii_letters, k=8))
-        super().__init__(symbol=symbol, constraint=constraint, **kwargs)
+    # def __init__(self, symbol: str = None, constraint: Constraint = None, **kwargs):
+    #     if symbol is None:
+    #         symbol = ''.join(random.choices(string.ascii_letters, k=8))
+    #     super().__init__(symbol=symbol, constraint=constraint, **kwargs)
 
     @classmethod
     @field_validator('symbol', mode='before')
@@ -121,8 +120,8 @@ class Variable(BaseModel, N3Serializable):
 class Value(BaseModel, N3Serializable):
     value: Union[str, int, float]
 
-    def __init__(self, value: Union[str, int, float], **kwargs):
-        super().__init__(value=value, **kwargs)
+    # def __init__(self, value: Union[str, int, float], **kwargs):
+    #     super().__init__(value=value, **kwargs)
 
     @classmethod
     @field_validator('value', mode='before')
@@ -150,10 +149,10 @@ class Value(BaseModel, N3Serializable):
 
 
 # Predefined identifiers
-RDF_TYPE = Identifier(RDF.type)
-RDFS_LABEL = Identifier(RDFS.label)
-OWL_CLASS = Identifier(OWL.Class)
-OWL_INDIVIDUAL = Identifier(OWL.NamedIndividual)
+RDF_TYPE = Identifier(id=RDF.type)
+RDFS_LABEL = Identifier(id=RDFS.label)
+OWL_CLASS = Identifier(id=OWL.Class)
+OWL_INDIVIDUAL = Identifier(id=OWL.NamedIndividual)
 
 Constraint = Union[Value, Tuple[Identifier, Value]]
 Subject = Union[Identifier, Variable]
@@ -414,7 +413,8 @@ class UnaryQuery(Select):
         Unary query
         """
         prefixes: Optional[Dict] = None
-        graph: str = "defaultGraph"
+        graph: Optional[str] = None #"defaultGraph"
+        dataset: Optional[str] = None
         subject: Subject = Variable.new(SUBJECT_VARIABLE)
         kind: Optional[Union[Identifier, List[Identifier]]] = None
         limit: int = -1
