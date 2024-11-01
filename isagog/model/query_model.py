@@ -57,11 +57,15 @@ class Identifier(BaseModel, N3Serializable):
     id: Union[N3String, URIRef]
 
     model_config = {
-        "arbitrary_types_allowed": True
+        "arbitrary_types_allowed": True,
+        "frozen": True
     }
 
     def __str__(self) -> str:
         return self.id
+
+    def __hash__(self):
+        return hash(self.id)
 
     def n3(self):
         return self.id.n3()
@@ -82,10 +86,12 @@ class Variable(BaseModel, N3Serializable):
     symbol: str = Field(default_factory=lambda: ''.join(random.choices(string.ascii_letters, k=8)))
     constraint: Optional[Constraint] = None
 
-    # def __init__(self, symbol: str = None, constraint: Constraint = None, **kwargs):
-    #     if symbol is None:
-    #         symbol = ''.join(random.choices(string.ascii_letters, k=8))
-    #     super().__init__(symbol=symbol, constraint=constraint, **kwargs)
+    model_config = {
+        "frozen": True
+    }
+
+    def __hash__(self):
+        return hash(self.symbol)
 
     @classmethod
     @field_validator('symbol', mode='before')
@@ -121,7 +127,12 @@ class Value(BaseModel, N3Serializable):
     value: Union[str, int, float]
 
     # def __init__(self, value: Union[str, int, float], **kwargs):
-    #     super().__init__(value=value, **kwargs)
+    model_config = {
+        "frozen": True
+    }
+
+    def __hash__(self):
+        return hash(self.value)
 
     @classmethod
     @field_validator('value', mode='before')
@@ -180,8 +191,8 @@ class Clause(BaseModel):
 
 class AtomicClause(Clause):
     property: Identifier = Field(...)
-    subject: Subject = Field(default_factory=lambda: Variable(SUBJECT_VARIABLE))
-    argument: Argument = Field(default_factory=lambda: Value(""))
+    subject: Subject = Field(default_factory=lambda: Variable(symbol=SUBJECT_VARIABLE))
+    argument: Argument = Field(default_factory=lambda: Value(value=0))
     operator: Comparison = Field(default=Comparison.ANY)
     project: bool = True
     optional: bool = False
