@@ -385,11 +385,11 @@ class Individual(KnowledgeObject):
     def get_score(self) -> Optional[float]:
         return self.score
 
-    def get_attribute(self, attribute_id: ID) -> Optional[AttributeAssertion]:
-        return next((attr for attr in self.attributes if attr.id == attribute_id), None)
+    def get_attribute(self, property_id: ID) -> Optional[AttributeAssertion]:
+        return next((attr for attr in self.attributes if attr.property == property_id), None)
 
-    def get_relation(self, relation_id: ID) -> Optional[RelationAssertion]:
-        return next((rel for rel in self.relations if rel.id == relation_id), None)
+    def get_relation(self, property_id: ID) -> Optional[RelationAssertion]:
+        return next((rel for rel in self.relations if rel.property == property_id), None)
 
     def n3(self) -> str:
 
