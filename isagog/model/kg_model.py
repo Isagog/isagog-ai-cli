@@ -365,6 +365,9 @@ class Individual(KnowledgeObject):
         if self.attributes is None:
             self.attributes = []
         attribute_assertion = self.get_attribute(attribute)
+        if not attribute_assertion:
+            attribute_assertion = AttributeAssertion(property=attribute)
+            self.attributes.append(attribute_assertion)
         attribute_assertion.values.append(N3String(value))
 
     def get_labels(self) -> List[str]:
