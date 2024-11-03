@@ -4,16 +4,65 @@
  Defines ontology and related classes
 
 """
+from abc import ABC, abstractmethod
 from io import StringIO
-from typing import IO, Optional, TextIO
+from typing import IO, Optional, TextIO, Dict
 
+from pydantic import BaseModel
 from rdflib import OWL, RDF, RDFS, Graph
-from rdflib.term import Literal
+from rdflib.term import Literal, URIRef
 
-from isagog.model.kg_model import ID, Concept, Relation, Attribute
+from isagog.model.kg_model import ID, Concept, Relation, Attribute, DataType
 
 
-class Ontology(Graph):
+class Ontology(BaseModel, ABC):
+
+    namespace: Dict[str, str] = {}
+    source: str = None
+    publicIRI: str = None
+    source_format: str = None
+    concepts: Dict[ID, Concept] = {}
+    relations: Dict[ID, Relation] = {}
+    attributes: Dict[ID, Attribute] = {}
+    _submap: dict[ID, list[Concept]] = {}
+
+
+    def get_concept(self, id: ID) -> Concept | None:
+        return self.concepts.get(id)
+
+
+    def get_relation(self, id: ID) -> Relation | None:
+        return self.relations.get(id)
+
+    def get_attribute(self, id: ID) -> Attribute | None:
+        return self.attributes.get(id)
+
+
+    def add_concept(self, concept: Concept) -> 'Ontology':
+        if concept.id not in self.concepts:
+            self.concepts[concept.id] = concept
+        else:
+            raise ValueError(f"Concept {concept} already in ontology")
+        return self
+
+
+    def add_relation(self, relation: Relation) -> 'Ontology':
+        if relation.id not in self.relations:
+            self.relations[relation.id] = relation
+        else:
+            raise ValueError(f"Relation {relation} already in ontology")
+
+
+    def add_attribute(self, attribute: Attribute ) -> 'Ontology':
+        if attribute.id not in self.attributes:
+            self.attributes[attribute.id] = attribute
+        else:
+            raise ValueError(f"Attribute {attribute} already in ontology")
+        return self
+
+
+
+class OWLOntology(Ontology):
     """
     In-memory, read-only RDF representation of an ontology.
     Manages basic reasoning on declared inclusion dependencies (RDFS.subClassOf).
@@ -25,121 +74,174 @@ class Ontology(Graph):
     no super-categories allowed.
     """
 
-    def __init__(
-            self,
-            source: IO[bytes] | TextIO | str,
-            publicIRI: str,
-            source_format="turtle",
-            category_annotation=ID(
-                "https://isagog.com/ontologies/top#meta"
-            ),
-    ):
-        """
-        :param source:  Path to the ontology source file.
-        :param publicIRI:  Base IRI for the ontology.
-        :param source_format:  Format of the ontology.
-        :param category_annotation:  Annotation marker for categories.
-        """
-        Graph.__init__(self, identifier=publicIRI)
-        self.parse(source=source, publicID=publicIRI, format=source_format)
-        self.categories = [
-            Concept(id=cls)
-            for cls in self.subjects(
-                predicate=category_annotation, object=Literal("CATEGORY")
-            )
-            if isinstance(cls, ID)
-        ]
+    graph: Graph = None
 
-        self.concepts = [
-            Concept(id=cls)
-            for cls in self.subjects(predicate=RDF.type, object=OWL.Class)
-            if isinstance(cls, ID)
-        ]
-        self.relations = [
-            Relation(id=rl)
-            for rl in self.subjects(
-                predicate=RDF.type, object=OWL.ObjectProperty
-            )
-            if isinstance(rl, ID)
-        ]
-        self.attributes = [
-            Attribute(id=att)
-            for att in self.subjects(
-                predicate=RDF.type, object=OWL.DatatypeProperty
-            )
-            if isinstance(att, ID)
-        ]
-        for ann in self.subjects(
-                predicate=RDF.type, object=OWL.AnnotationProperty
-        ):
-            if isinstance(ann, ID):
-                self.attributes.append(Attribute(id=ann))
 
-        self._submap = dict[Concept, list[Concept]]()
 
-    def subclasses(self, sup: Concept) -> list[Concept]:
-        """
-        Gets direct subclasses of a given concept.
-        """
-        if sup not in self._submap:
-            self._submap[sup] = [
-                Concept(id=sc)
-                for sc in self.subjects(predicate=RDFS.subClassOf, object=sup.id)
-                if isinstance(sc, ID)
-            ]
-        return self._submap[sup]
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
 
-    def is_subclass(self, sub: Concept, sup: Concept) -> bool:
-        """
-        Tells if a given concept implies another given concept (i.e. is a subclass)
-        :param sub:  Subconcept
-        :param sup:  Superconcept
-        """
 
-        if sub == sup:
-            return True
-        subcls = self.subclasses(sup)
-        found = False
-        while not found:
-            if sub in subcls:
-                found = True
-            else:
-                for _sc in subcls:
-                    if self.is_subclass(sub, _sc):
-                        found = True
+    def _load_concepts_from_graph(self) -> Dict[str, Concept]:
+        """
+        Load concepts from an RDF graph.
+
+        Args:
+            graph: An rdflib.Graph containing OWL/RDFS class definitions
+
+        Returns:
+            A dictionary mapping concept URIs to Concept objects
+        """
+        concepts: Dict[str, Concept] = {}
+
+        # First pass: Create all concepts
+        for subject in self.graph.subjects(RDF.type, OWL.Class):
+            if isinstance(subject, URIRef):
+                concept = Concept()
+                concepts[str(subject)] = concept
+
+        # Second pass: Add relationships
+        for subject, predicate, obj in self.graph:
+            if not isinstance(subject, URIRef) or str(subject) not in concepts:
+                continue
+
+            concept = concepts[str(subject)]
+
+            # Handle subclass relationships (parents)
+            if predicate == RDFS.subClassOf and isinstance(obj, URIRef):
+                concept.add_parent(str(obj))
+
+            # Handle disjoint relationships
+            elif predicate == OWL.disjointWith and isinstance(obj, URIRef):
+                concept.add_disjoint(str(obj))
+
+        return concepts
+
+
+    def load_attributes_from_graph(self, concepts: Dict[str, Concept]) -> Dict[str, Attribute]:
+        """
+        Load attributes (data properties) from an RDF graph.
+
+        Args:
+            graph: An rdflib.Graph containing property definitions
+            concepts: Dictionary of already loaded concepts for reference
+
+        Returns:
+            Dictionary mapping attribute URIs to Attribute objects
+        """
+        attributes: Dict[str, Attribute] = {}
+
+        # Find all data properties
+        for subject in self.graph.subjects(RDF.type, OWL.DatatypeProperty):
+            if not isinstance(subject, URIRef):
+                continue
+
+            uri = str(subject)
+            attribute = Attribute()
+
+            # Get domain
+            for domain in self.graph.objects(subject, RDFS.domain):
+                if isinstance(domain, URIRef) and str(domain) in concepts:
+                    attribute.set_domain(ID(str(domain)))
+                    break
+
+            # Get range (data type)
+            for range_type in self.graph.objects(subject, RDFS.range):
+                if isinstance(range_type, URIRef):
+                    data_type = DataType.from_uri(str(range_type))
+                    if data_type:
+                        attribute.set_range(data_type)
                         break
-                break
-        return found
 
-    def categorize(self, classes: list[Concept]) -> Optional[Concept]:
+            # Get parent properties
+            for parent in self.graph.objects(subject, RDFS.subPropertyOf):
+                if isinstance(parent, URIRef):
+                    attribute.add_parent(str(parent))
+
+            attributes[uri] = attribute
+
+        return attributes
+
+    def _load_relations_from_graph(self, concepts: Dict[str, Concept]) -> Dict[str, Relation]:
         """
-        Finds the category for the given concept.
-        :param classes: the classes to categorize
-        :return:
+        Load relations (object properties) from an RDF graph.
+
+        Args:
+            graph: An rdflib.Graph containing property definitions
+            concepts: Dictionary of already loaded concepts for reference
+
+        Returns:
+            Dictionary mapping relation URIs to Relation objects
         """
-        for cls in classes:
-            for _c in self.categories:
-                if self.is_subclass(cls, _c):
-                    return _c
-        return None
+        relations: Dict[str, Relation] = {}
 
-    def get_concept(self, candidate: str) -> Concept | None:
-        return next((item for item in self.concepts if str(item.id) == candidate), None)
+        # First pass: Create all relations
+        for subject in self.graph.subjects(RDF.type, OWL.ObjectProperty):
+            if not isinstance(subject, URIRef):
+                continue
 
-    def get_relation(self, candidate: str) -> Relation | None:
-        return next((item for item in self.relations if str(item.id) == candidate), None)
+            uri = str(subject)
+            relation = Relation()
+            relations[uri] = relation
 
-    def get_attribute(self, candidate: str) -> Attribute | None:
-        return next((item for item in self.attributes if str(item.id) == candidate), None)
+        # Second pass: Set properties and handle inverse relationships
+        for uri, relation in relations.items():
+            subject = URIRef(uri)
+
+            # Get domain
+            for domain in self.graph.objects(subject, RDFS.domain):
+                if isinstance(domain, URIRef) and str(domain) in concepts:
+                    relation.set_domain(ID(str(domain)))
+                    break
+
+            # Get range
+            for range_val in self.graph.objects(subject, RDFS.range):
+                if isinstance(range_val, URIRef) and str(range_val) in concepts:
+                    relation.range = ID(str(range_val))
+                    break
+
+            # Get parent properties
+            for parent in self.graph.objects(subject, RDFS.subPropertyOf):
+                if isinstance(parent, URIRef):
+                    relation.add_parent(str(parent))
+
+            # Get inverse relationship
+            for inverse in self.graph.objects(subject, OWL.inverseOf):
+                if isinstance(inverse, URIRef):
+                    relation.inverse = ID(str(inverse))
+                    break
+
+        return relations
 
 
-VOID_ONTOLOGY = """
-    @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-    @prefix owl: <http://www.w3.org/2002/07/owl#> .
-    <http://isagog.com/ontologies/void> rdf:type owl:Ontology .
-    """
+    def model_post_init(self, __context) -> None:
+        if not self.graph:
+            if not self.source:
+                raise ValueError("No source provided")
+            if not self.publicIRI:
+                raise ValueError("No public IRI provided")
+            if not self.source_format:
+                self.source_format = "turtle"
+            self.graph = Graph()
+            self.graph.parse(source=self.source, publicID=self.publicIRI, format=self.source_format)
 
-VoidOntology = Ontology(
-    source=StringIO(VOID_ONTOLOGY),
-    publicIRI="http://isagog.com/ontologies/void",
-)
+        self.concepts = self._load_concepts_from_graph()
+        self.attributes = self.load_attributes_from_graph(self.concepts)
+        self.relations = self._load_relations_from_graph(self.concepts)
+
+
+
+
+
+
+# VOID_ONTOLOGY = """
+#     @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+#     @prefix owl: <http://www.w3.org/2002/07/owl#> .
+#     <http://isagog.com/ontologies/void> rdf:type owl:Ontology .
+#     """
+#
+# VoidOntology = Ontology(
+#     source=VOID_ONTOLOGY,
+#     publicIRI="http://isagog.com/ontologies/void",
+# )

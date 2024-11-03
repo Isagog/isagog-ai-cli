@@ -75,22 +75,24 @@ class N3String(str, N3Serializable):
 ID = N3String
 
 
-class DataType(Enum):
-    STRING = "STRING"
-    INTEGER = "INTEGER"
-    FLOATING = "FLOATING"
-    BOOLEAN = "BOOLEAN"
-    URI = "URI"
+class DataType(str, Enum):
+    STRING = "xsd:string"
+    INTEGER = "xsd:integer"
+    FLOAT = "xsd:float"
+    BOOLEAN = "xsd:boolean"
+    DATE = "xsd:date"
+    DATETIME = "xsd:dateTime"
 
-    def n3(self):
-        xsd_map = {
-            DataType.STRING: 'xsd:string',
-            DataType.INTEGER: 'xsd:integer',
-            DataType.FLOATING: 'xsd:float',
-            DataType.BOOLEAN: 'xsd:boolean',
-            DataType.URI: 'xsd:anyURI',
-        }
-        return xsd_map[self]
+    def n3(self) -> str:
+        return str(self.value)
+
+    @classmethod
+    def from_uri(cls, uri: str) -> Optional['DataType']:
+        uri = str(uri).lower()
+        for dt in cls:
+            if dt.value.lower() in uri:
+                return dt
+        return None
 
 
 def _uri_label(uri: str) -> str:
@@ -167,10 +169,19 @@ class Predicate(KnowledgeObject, ABC):
     """
     Represents any predicate.
     """
-    parents: Optional[Set[ID]] = Field(default_factory=list, description="The parent concepts of this concept.")
+    parents: Optional[Set[ID]] = Field(default_factory=set, description="The parent concepts of this concept.")
+    disjoint: Optional[Set[ID]] = Field(default_factory=set, description="The disjoint concepts of this concept.")
 
-    def add_parent(self, uri: str):
-        self.parents.add(ID(uri))
+    def add_parent(self, uri: str | ID):
+        if isinstance(uri, str):
+            uri = ID(uri)
+        self.parents.add(uri)
+
+    def add_disjoint(self, uri: str| ID):
+        if isinstance(uri, str):
+            uri = ID(uri)
+        self.disjoint.add(uri)
+
 
 
 class Concept(Predicate):
