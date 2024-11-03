@@ -24,7 +24,8 @@ class Ontology(BaseModel, ABC):
     concepts: Dict[ID, Concept] = {}
     relations: Dict[ID, Relation] = {}
     attributes: Dict[ID, Attribute] = {}
-    _submap: dict[ID, list[Concept]] = {}
+    languages: list[str] = ["en", "it"]
+
 
 
     def get_concept(self, id: ID) -> Concept | None:
@@ -78,9 +79,26 @@ class OWLOntology(Ontology):
 
 
 
+
+
     model_config = {
         "arbitrary_types_allowed": True
     }
+
+    def _get_literal_values(self, subject: URIRef, predicate: URIRef) -> list[str]:
+        """Helper function to get literal values with language tag preference."""
+        # First try with language tag
+        values = []
+        for obj in self.graph.objects(subject, predicate):
+            if isinstance(obj, Literal) and obj.language in self.languages:
+                values.append(str(obj))
+
+        # If not found, try without language tag
+        for obj in self.graph.objects(subject, predicate):
+            if isinstance(obj, Literal):
+                values.append(str(obj))
+
+        return values
 
 
     def _load_concepts_from_graph(self) -> Dict[str, Concept]:
@@ -98,7 +116,7 @@ class OWLOntology(Ontology):
         # First pass: Create all concepts
         for subject in self.graph.subjects(RDF.type, OWL.Class):
             if isinstance(subject, URIRef):
-                concept = Concept()
+                concept = Concept(id=ID(str(subject)))
                 concepts[str(subject)] = concept
 
         # Second pass: Add relationships
@@ -115,6 +133,15 @@ class OWLOntology(Ontology):
             # Handle disjoint relationships
             elif predicate == OWL.disjointWith and isinstance(obj, URIRef):
                 concept.add_disjoint(str(obj))
+
+            labels = self._get_literal_values(subject, RDFS.label)
+            if labels:
+                concept.labels = labels
+
+            # Get comment (try RDFS comment)
+            comments = self._get_literal_values(subject, RDFS.comment)
+            if comments:
+                concept.comments = comments
 
         return concepts
 
@@ -138,7 +165,7 @@ class OWLOntology(Ontology):
                 continue
 
             uri = str(subject)
-            attribute = Attribute()
+            attribute = Attribute(id=ID(uri))
 
             # Get domain
             for domain in self.graph.objects(subject, RDFS.domain):
@@ -158,6 +185,16 @@ class OWLOntology(Ontology):
             for parent in self.graph.objects(subject, RDFS.subPropertyOf):
                 if isinstance(parent, URIRef):
                     attribute.add_parent(str(parent))
+
+            labels = self._get_literal_values(subject, RDFS.label)
+            if labels:
+                attribute.labels = labels
+
+            # Get comment (try RDFS comment)
+            comments = self._get_literal_values(subject, RDFS.comment)
+            if comments:
+                attribute.comments = comments
+
 
             attributes[uri] = attribute
 
@@ -182,7 +219,7 @@ class OWLOntology(Ontology):
                 continue
 
             uri = str(subject)
-            relation = Relation()
+            relation = Relation(id=ID(uri))
             relations[uri] = relation
 
         # Second pass: Set properties and handle inverse relationships
@@ -211,6 +248,16 @@ class OWLOntology(Ontology):
                 if isinstance(inverse, URIRef):
                     relation.inverse = ID(str(inverse))
                     break
+
+            labels = self._get_literal_values(subject, RDFS.label)
+            if labels:
+                relation.labels = labels
+
+            # Get comment (try RDFS comment)
+            comments = self._get_literal_values(subject, RDFS.comment)
+            if comments:
+                relation.comments = comments
+
 
         return relations
 
