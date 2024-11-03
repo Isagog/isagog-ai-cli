@@ -16,7 +16,7 @@ from rdflib import URIRef, Literal, OWL, RDFS
 class N3Serializable(ABC):
 
     @abstractmethod
-    def n3(self) -> str:
+    def n3(self, **kwargs) -> str:
         pass
 
 class N3String(str, N3Serializable):
@@ -391,7 +391,7 @@ class Individual(KnowledgeObject):
     def get_relation(self, property_id: ID) -> Optional[RelationAssertion]:
         return next((rel for rel in self.relations if rel.property == property_id), None)
 
-    def n3(self) -> str:
+    def n3(self, **kwargs) -> str:
 
         result = super().n3() + "\n"
         result += f"{self.id.n3()} a owl:NamedIndividual"
