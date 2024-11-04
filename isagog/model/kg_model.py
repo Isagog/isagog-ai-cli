@@ -10,7 +10,7 @@ from typing import List, Optional, Dict, Any, Set
 
 from pydantic import BaseModel, Field
 from pydantic_core import core_schema
-from rdflib import URIRef, Literal, OWL, RDFS
+from rdflib import Literal, OWL, RDFS
 
 
 class N3Serializable(ABC):
@@ -95,32 +95,33 @@ class DataType(str, Enum):
         return None
 
 
+
+
 def _uri_label(uri: str) -> str:
-    if not uri:
-        raise ValueError("can't get label from None")
-
-    if isinstance(uri, URIRef):
-        return uri.fragment
-    elif "#" in uri:
-        return uri.split("#")[-1]
-    elif "/" in uri:
-        return uri.split("/")[-1]
-    else:
-        return uri
-
+    """Extract a human-readable label from a URI."""
+    # Get the last part of the URI after the last / or #
+    label = str(uri).split('/')[-1].split('#')[-1]
+    # Convert camelCase or snake_case to space-separated words
+    # You might want to customize this based on your URI patterns
+    return label.replace('_', ' ').replace('-', ' ')
 
 class KnowledgeObject(BaseModel, N3Serializable, ABC):
     """
-    Base class for all knowledge objects
+    Base class for all knowledge objects.
     Each object has an ID, which is a unique identifier, at least a label and optionally some comment.
     """
     id: ID = Field(
         ...,
         description="The unique identifier of the object, which supports n3 serialization."
     )
-    labels: Optional[List[str]] = Field(None,
-                                        description="The human-readable labels of the object. If missing or void, a default label is generated from the ID.")
-    comments: Optional[List[str]] = Field(None, description="The human-readable comments of the object.")
+    labels: List[str] = Field(
+        default_factory=list,
+        description="The human-readable labels of the object. If missing or void, a default label is generated from the ID."
+    )
+    comments: Optional[List[str]] = Field(
+        default_factory=list,
+        description="The human-readable comments of the object."
+    )
 
     @classmethod
     def __get_validators__(cls):
@@ -128,44 +129,56 @@ class KnowledgeObject(BaseModel, N3Serializable, ABC):
 
     @classmethod
     def validate(cls, v):
+        if isinstance(v, cls):
+            return v
         if isinstance(v, dict):
             return cls(**v)
-        return v
+        if isinstance(v, str):
+            # Assuming you want to create an object from a string ID
+            return cls(id=v)
+        raise ValueError(f'Cannot create {cls.__name__} from {type(v)}')
 
     def __init__(self, **data):
         # Convert id to N3String if it's another type
         if 'id' in data and not isinstance(data['id'], N3String):
             data['id'] = N3String(str(data['id']))
 
+        # Initialize labels list if not present
         if 'labels' not in data or not data['labels']:
             data['labels'] = [_uri_label(data['id'])]
+        elif isinstance(data['labels'], str):
+            # Handle case where single string is provided
+            data['labels'] = [data['labels']]
+
+        # Initialize comments as empty list if not present
+        if 'comments' not in data:
+            data['comments'] = []
+        elif isinstance(data['comments'], str):
+            # Handle case where single string is provided
+            data['comments'] = [data['comments']]
 
         super().__init__(**data)
 
+    def add_label(self, label: str) -> None:
+        """Add a label to the object."""
+        if not self.labels:
+            self.labels = []
+        if label not in self.labels:
+            self.labels.append(label)
 
-    def n3(self) -> str:
-        """
-        Return the N3 serialization of the object.
-        """
-        result = self.id.n3()
+    def add_comment(self, comment: str) -> None:
+        """Add a comment to the object."""
+        if not self.comments:
+            self.comments = []
+        if comment not in self.comments:
+            self.comments.append(comment)
 
-        for label in self.labels:
-            result += f"{self.id.n3()} rdfs:label {N3String(label).n3()} .\n"
-        for comment in self.comments or []:
-            result += f"{self.id.n3()} rdfs:comment {N3String(comment).n3()} .\n"
-        return result.strip()
+    def get_primary_label(self) -> str:
+        """Get the primary (first) label of the object."""
+        return self.labels[0] if self.labels else _uri_label(self.id)
 
 
-    def add_label(self, label: str):
-        self.labels.append(Literal(label))
-
-    def add_comment(self, comment: str):
-        self.comments.append(Literal(comment))
-
-    def has_comment(self) -> bool:
-        return self.comments is not None
-
-class Predicate(KnowledgeObject, ABC):
+class Predicate(KnowledgeObject):
     """
     Represents any predicate.
     """
@@ -182,6 +195,14 @@ class Predicate(KnowledgeObject, ABC):
             uri = ID(uri)
         self.disjoint.add(uri)
 
+    def n3(self) -> str:
+        result = super().n3() + "\n"
+        for parent in self.parents:
+            result += f"{self.id.n3()} rdfs:subPropertyOf {parent.n3()} .\n"
+        for disjoint in self.disjoint:
+            result += f"{self.id.n3()} owl:disjointWith {disjoint.n3()} .\n"
+        return result.strip()
+
 
 
 class Concept(Predicate):
@@ -193,12 +214,10 @@ class Concept(Predicate):
     def n3(self) -> str:
         result = f"{self.id.n3()} a owl:Class .\n"
         result += super().n3() + "\n"
-        for parent in self.parents:
-            result += f"{self.id.n3()} rdfs:subClassOf {parent.n3()} .\n"
         return result.strip()
 
 
-class Property(Predicate, ABC):
+class Property(Predicate):
     """
     Represents a binary predicate (type) in the knowledge base.
     """

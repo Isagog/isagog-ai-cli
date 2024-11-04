@@ -4,27 +4,32 @@
  Defines ontology and related classes
 
 """
-from abc import ABC, abstractmethod
 from io import StringIO
-from typing import IO, Optional, TextIO, Dict
+from typing import Dict, Optional, Union, TextIO, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, PrivateAttr
 from rdflib import OWL, RDF, RDFS, Graph
 from rdflib.term import Literal, URIRef
 
 from isagog.model.kg_model import ID, Concept, Relation, Attribute, DataType
 
 
-class Ontology(BaseModel, ABC):
+class Ontology(BaseModel):
+    """
+        In-memory representation of an ontology.
+    """
+    namespace: Dict[str, str] = Field(default_factory=dict)
+    source: Optional[Union[str, TextIO]] = Field(default=None)
+    publicIRI: Optional[str] = Field(default=None)  # Consider using AnyUrl from pydantic
+    source_format: Optional[str] = Field(default=None)  # Consider using Enum
+    concepts: Dict[ID, Concept] = Field(default_factory=dict)
+    relations: Dict[ID, Relation] = Field(default_factory=dict)
+    attributes: Dict[ID, Attribute] = Field(default_factory=dict)
+    languages: List[str] = Field(default_factory=lambda: ["en", "it"])
 
-    namespace: Dict[str, str] = {}
-    source: str = None
-    publicIRI: str = None
-    source_format: str = None
-    concepts: Dict[ID, Concept] = {}
-    relations: Dict[ID, Relation] = {}
-    attributes: Dict[ID, Attribute] = {}
-    languages: list[str] = ["en", "it"]
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
 
 
 
@@ -65,21 +70,10 @@ class Ontology(BaseModel, ABC):
 
 class OWLOntology(Ontology):
     """
-    In-memory, read-only RDF representation of an ontology.
-    Manages basic reasoning on declared inclusion dependencies (RDFS.subClassOf).
-    Also, it manages classes annotated as 'category' in the ontology. Categories
-    are 'rigid' concepts,
-    i.e. they (should) hold for an individual in every 'possible world'.
-    Categories should be (a) disjoint from their siblings, (b) maximal, i.e.
-    for any category,
-    no super-categories allowed.
+    OWL ontology representation.
     """
 
-    graph: Graph = None
-
-
-
-
+    _graph: Graph = PrivateAttr(default=None)
 
     model_config = {
         "arbitrary_types_allowed": True
@@ -89,14 +83,15 @@ class OWLOntology(Ontology):
         """Helper function to get literal values with language tag preference."""
         # First try with language tag
         values = []
-        for obj in self.graph.objects(subject, predicate):
+        for obj in self._graph.objects(subject, predicate):
             if isinstance(obj, Literal) and obj.language in self.languages:
                 values.append(str(obj))
 
         # If not found, try without language tag
-        for obj in self.graph.objects(subject, predicate):
-            if isinstance(obj, Literal):
-                values.append(str(obj))
+        if not values:
+            for obj in self._graph.objects(subject, predicate):
+                if isinstance(obj, Literal):
+                    values.append(str(obj))
 
         return values
 
@@ -105,22 +100,19 @@ class OWLOntology(Ontology):
         """
         Load concepts from an RDF graph.
 
-        Args:
-            graph: An rdflib.Graph containing OWL/RDFS class definitions
-
         Returns:
             A dictionary mapping concept URIs to Concept objects
         """
         concepts: Dict[str, Concept] = {}
 
         # First pass: Create all concepts
-        for subject in self.graph.subjects(RDF.type, OWL.Class):
+        for subject in self._graph.subjects(RDF.type, OWL.Class):
             if isinstance(subject, URIRef):
                 concept = Concept(id=ID(str(subject)))
                 concepts[str(subject)] = concept
 
         # Second pass: Add relationships
-        for subject, predicate, obj in self.graph:
+        for subject, predicate, obj in self._graph:
             if not isinstance(subject, URIRef) or str(subject) not in concepts:
                 continue
 
@@ -146,13 +138,9 @@ class OWLOntology(Ontology):
         return concepts
 
 
-    def load_attributes_from_graph(self, concepts: Dict[str, Concept]) -> Dict[str, Attribute]:
+    def _load_attributes_from_graph(self) -> Dict[str, Attribute]:
         """
         Load attributes (data properties) from an RDF graph.
-
-        Args:
-            graph: An rdflib.Graph containing property definitions
-            concepts: Dictionary of already loaded concepts for reference
 
         Returns:
             Dictionary mapping attribute URIs to Attribute objects
@@ -160,21 +148,20 @@ class OWLOntology(Ontology):
         attributes: Dict[str, Attribute] = {}
 
         # Find all data properties
-        for subject in self.graph.subjects(RDF.type, OWL.DatatypeProperty):
+        for subject in self._graph.subjects(RDF.type, OWL.DatatypeProperty):
             if not isinstance(subject, URIRef):
                 continue
 
             uri = str(subject)
             attribute = Attribute(id=ID(uri))
-
             # Get domain
-            for domain in self.graph.objects(subject, RDFS.domain):
-                if isinstance(domain, URIRef) and str(domain) in concepts:
+            for domain in self._graph.objects(subject, RDFS.domain):
+                if isinstance(domain, URIRef) and str(domain) in self.concepts:
                     attribute.set_domain(ID(str(domain)))
                     break
 
             # Get range (data type)
-            for range_type in self.graph.objects(subject, RDFS.range):
+            for range_type in self._graph.objects(subject, RDFS.range):
                 if isinstance(range_type, URIRef):
                     data_type = DataType.from_uri(str(range_type))
                     if data_type:
@@ -182,7 +169,7 @@ class OWLOntology(Ontology):
                         break
 
             # Get parent properties
-            for parent in self.graph.objects(subject, RDFS.subPropertyOf):
+            for parent in self._graph.objects(subject, RDFS.subPropertyOf):
                 if isinstance(parent, URIRef):
                     attribute.add_parent(str(parent))
 
@@ -200,13 +187,9 @@ class OWLOntology(Ontology):
 
         return attributes
 
-    def _load_relations_from_graph(self, concepts: Dict[str, Concept]) -> Dict[str, Relation]:
+    def _load_relations_from_graph(self) -> Dict[str, Relation]:
         """
         Load relations (object properties) from an RDF graph.
-
-        Args:
-            graph: An rdflib.Graph containing property definitions
-            concepts: Dictionary of already loaded concepts for reference
 
         Returns:
             Dictionary mapping relation URIs to Relation objects
@@ -214,7 +197,7 @@ class OWLOntology(Ontology):
         relations: Dict[str, Relation] = {}
 
         # First pass: Create all relations
-        for subject in self.graph.subjects(RDF.type, OWL.ObjectProperty):
+        for subject in self._graph.subjects(RDF.type, OWL.ObjectProperty):
             if not isinstance(subject, URIRef):
                 continue
 
@@ -227,24 +210,24 @@ class OWLOntology(Ontology):
             subject = URIRef(uri)
 
             # Get domain
-            for domain in self.graph.objects(subject, RDFS.domain):
-                if isinstance(domain, URIRef) and str(domain) in concepts:
+            for domain in self._graph.objects(subject, RDFS.domain):
+                if isinstance(domain, URIRef) and str(domain) in self.concepts:
                     relation.set_domain(ID(str(domain)))
                     break
 
             # Get range
-            for range_val in self.graph.objects(subject, RDFS.range):
-                if isinstance(range_val, URIRef) and str(range_val) in concepts:
+            for range_val in self._graph.objects(subject, RDFS.range):
+                if isinstance(range_val, URIRef) and str(range_val) in self.concepts:
                     relation.range = ID(str(range_val))
                     break
 
             # Get parent properties
-            for parent in self.graph.objects(subject, RDFS.subPropertyOf):
+            for parent in self._graph.objects(subject, RDFS.subPropertyOf):
                 if isinstance(parent, URIRef):
                     relation.add_parent(str(parent))
 
             # Get inverse relationship
-            for inverse in self.graph.objects(subject, OWL.inverseOf):
+            for inverse in self._graph.objects(subject, OWL.inverseOf):
                 if isinstance(inverse, URIRef):
                     relation.inverse = ID(str(inverse))
                     break
@@ -263,32 +246,33 @@ class OWLOntology(Ontology):
 
 
     def model_post_init(self, __context) -> None:
-        if not self.graph:
+        if not self._graph:
             if not self.source:
                 raise ValueError("No source provided")
             if not self.publicIRI:
                 raise ValueError("No public IRI provided")
             if not self.source_format:
                 self.source_format = "turtle"
-            self.graph = Graph()
-            self.graph.parse(source=self.source, publicID=self.publicIRI, format=self.source_format)
+            self._graph = Graph()
+            self._graph.parse(source=self.source, publicID=self.publicIRI, format=self.source_format)
 
+        # Load concepts, attributes, and relations, keeping the order
         self.concepts = self._load_concepts_from_graph()
-        self.attributes = self.load_attributes_from_graph(self.concepts)
-        self.relations = self._load_relations_from_graph(self.concepts)
+        self.attributes = self._load_attributes_from_graph()
+        self.relations = self._load_relations_from_graph()
 
 
 
 
 
 
-# VOID_ONTOLOGY = """
-#     @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-#     @prefix owl: <http://www.w3.org/2002/07/owl#> .
-#     <http://isagog.com/ontologies/void> rdf:type owl:Ontology .
-#     """
-#
-# VoidOntology = Ontology(
-#     source=VOID_ONTOLOGY,
-#     publicIRI="http://isagog.com/ontologies/void",
-# )
+VOID_ONTOLOGY = """
+    @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+    <http://isagog.com/ontologies/void> rdf:type owl:Ontology .
+    """
+
+VoidOntology = OWLOntology(
+    source=StringIO(VOID_ONTOLOGY),
+    publicIRI="http://isagog.com/ontologies/void",
+)
