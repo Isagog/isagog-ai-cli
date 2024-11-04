@@ -8,7 +8,7 @@ from enum import Enum
 from typing import List, Optional, Dict, Any, Set
 
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from pydantic_core import core_schema
 from rdflib import Literal, OWL, RDFS
 
@@ -202,6 +202,7 @@ class Predicate(KnowledgeObject):
         for disjoint in self.disjoint:
             result += f"{self.id.n3()} owl:disjointWith {disjoint.n3()} .\n"
         return result.strip()
+
 
 
 
@@ -444,6 +445,81 @@ class Individual(KnowledgeObject):
             result += f"{self.id.n3()}  {SCORE_ANNOTATION.n3()} {self.score} .\n"
 
         return result.strip()
+
+
+def get_ancestors(predicate_id: ID, predicate_map: Dict[ID, Predicate], visited: Set[ID] = None) -> Set[ID]:
+    """
+    Helper function to get all ancestors (parents and their parents) of a predicate.
+    Uses recursion with cycle detection.
+    """
+    if visited is None:
+        visited = set()
+
+    if predicate_id in visited:
+        return set()
+
+    visited.add(predicate_id)
+    current_predicate = predicate_map.get(predicate_id)
+
+    if not current_predicate or not current_predicate.parents:
+        return set()
+
+    ancestors = set(current_predicate.parents)
+    for parent_id in current_predicate.parents:
+        parent_ancestors = get_ancestors(parent_id, predicate_map, visited)
+        ancestors.update(parent_ancestors)
+
+    return ancestors
+
+
+def validate_predicate_hierarchy(predicate: Predicate, predicate_map: Dict[ID, Predicate]) -> bool:
+    """
+    Validates that a predicate's hierarchy is consistent by checking:
+    1. No cycles in the parent hierarchy
+    2. No disjoint predicates in the ancestor chain
+
+    Args:
+        predicate: The predicate to validate
+        predicate_map: A mapping of ID to Predicate objects to look up related predicates
+
+    Returns:
+        bool: True if the hierarchy is valid, False otherwise
+    """
+    # First check: Detect cycles in the hierarchy
+    visited = set()
+    to_visit = {predicate.id}
+
+    while to_visit:
+        current_id = to_visit.pop()
+        if current_id in visited:
+            # Cycle detected
+            return False
+
+        visited.add(current_id)
+        current_predicate = predicate_map.get(current_id)
+
+        if current_predicate and current_predicate.parents:
+            to_visit.update(current_predicate.parents)
+
+    # Second check: Verify no disjoint predicates in ancestor chain
+    # Get all ancestors including parents of parents
+    all_ancestors = get_ancestors(predicate.id, predicate_map)
+
+    # Check if any of the disjoint predicates appear in the ancestor chain
+    if predicate.disjoint:
+        if any(disj_id in all_ancestors for disj_id in predicate.disjoint):
+            return False
+
+    # Check if any ancestor's disjoint predicates conflict with other ancestors
+    for ancestor_id in all_ancestors:
+        ancestor = predicate_map.get(ancestor_id)
+        if ancestor and ancestor.disjoint:
+            if any(disj_id in all_ancestors for disj_id in ancestor.disjoint):
+                return False
+
+    return True
+
+
 
 
 # Constants and definitions

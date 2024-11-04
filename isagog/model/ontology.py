@@ -11,7 +11,10 @@ from pydantic import BaseModel, Field, PrivateAttr
 from rdflib import OWL, RDF, RDFS, Graph
 from rdflib.term import Literal, URIRef
 
-from isagog.model.kg_model import ID, Concept, Relation, Attribute, DataType
+from isagog.model.kg_model import ID, Concept, Relation, Attribute, DataType, Predicate, validate_predicate_hierarchy
+
+from typing import Set, Dict
+from pydantic import ValidationError
 
 
 class Ontology(BaseModel):
@@ -19,7 +22,7 @@ class Ontology(BaseModel):
         In-memory representation of an ontology.
     """
     namespace: Dict[str, str] = Field(default_factory=dict)
-    source: Optional[Union[str, TextIO]] = Field(default=None)
+    source: Optional[Union[str, TextIO, StringIO]] = Field(default=None)
     publicIRI: Optional[str] = Field(default=None)  # Consider using AnyUrl from pydantic
     source_format: Optional[str] = Field(default=None)  # Consider using Enum
     concepts: Dict[ID, Concept] = Field(default_factory=dict)
@@ -44,23 +47,29 @@ class Ontology(BaseModel):
         return self.attributes.get(id)
 
 
-    def add_concept(self, concept: Concept) -> 'Ontology':
+    def add_concept(self, concept: Concept, validate=True) -> 'Ontology':
         if concept.id not in self.concepts:
+            if validate and not validate_predicate_hierarchy(concept, self.concepts):
+                raise Exception(f"Inconsistent concept: {concept.id}")
             self.concepts[concept.id] = concept
         else:
             raise ValueError(f"Concept {concept} already in ontology")
         return self
 
 
-    def add_relation(self, relation: Relation) -> 'Ontology':
+    def add_relation(self, relation: Relation, validate=True) -> 'Ontology':
         if relation.id not in self.relations:
+            if validate and not validate_predicate_hierarchy(relation, self.concepts | self.relations):
+                raise Exception(f"Inconsistent relation: {relation.id}")
             self.relations[relation.id] = relation
         else:
             raise ValueError(f"Relation {relation} already in ontology")
 
 
-    def add_attribute(self, attribute: Attribute ) -> 'Ontology':
+    def add_attribute(self, attribute: Attribute, validate=True) -> 'Ontology':
         if attribute.id not in self.attributes:
+            if validate and not validate_predicate_hierarchy(attribute, self.concepts | self.attributes):
+                raise Exception(f"Inconsistent attribute: {attribute.id}")
             self.attributes[attribute.id] = attribute
         else:
             raise ValueError(f"Attribute {attribute} already in ontology")
