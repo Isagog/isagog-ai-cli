@@ -8,7 +8,7 @@ from enum import Enum
 from typing import List, Optional, Dict, Any, Set
 
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 from pydantic_core import core_schema
 from rdflib import Literal, OWL, RDFS
 
