@@ -61,6 +61,9 @@ class Identifier(BaseModel, N3Serializable):
         "frozen": True
     }
 
+    def __init__(self, id: Union[str, URIRef]) -> None:
+        super().__init__(id=N3String(id))
+
     def __str__(self) -> str:
         return self.id
 
@@ -89,6 +92,16 @@ class Variable(BaseModel, N3Serializable):
     model_config = {
         "frozen": True
     }
+
+    def __init__(self, symbol: Optional[str] = None, constraint: Optional[Constraint] = None) -> None:
+        # If no symbol is provided, let the default_factory handle it
+        symbol_value = symbol if symbol is not None else self.model_fields['symbol'].default_factory()
+
+        # Use super().__init__ to ensure all validators are run
+        super().__init__(
+            symbol=symbol_value,
+            constraint=constraint
+        )
 
     def __hash__(self):
         return hash(self.symbol)
@@ -130,6 +143,9 @@ class Value(BaseModel, N3Serializable):
     model_config = {
         "frozen": True
     }
+
+    def __init__(self, value: Union[str, int, float]) -> None:
+        super().__init__(value=value)
 
     def __hash__(self):
         return hash(self.value)
